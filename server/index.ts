@@ -18,41 +18,40 @@ const generateId = () => Math.random().toString(36).substring(2, 10);
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok', online: true }));
 
-// --- 新增：网易云音乐 Netease Cloud Music 原生检索代理 ---
-// 利用 Node.js 后端发起请求，完美避开浏览器的 CORS 跨域限制，且直连国内速度极快
+// --- 新增：网易云音乐 Web 原生单曲全量检索 ---
 app.get('/api/search', async (req, res) => {
   try {
     const keyword = req.query.q as string;
     if (!keyword) return res.json({ results: [] });
 
-    // type=10 表示搜索“专辑”（因为单曲 API 直接返回并不带封面图），这样能保证拿到超清封面
-    const ntRes = await fetch('http://music.163.com/api/search/get/', {
+    // 一步到位：使用网易云综合云端搜索接口 (cloudsearch/pc)，直接拉取该歌手的最热、最新 150 首完整单曲！
+    // 避免因为并发几十个专辑接口而触发网易云的反爬虫 (403/503) 防火墙，且可以保证歌曲热度降序排列
+    const ntRes = await fetch('http://music.163.com/api/cloudsearch/pc', {
       method: 'POST',
       headers: { 
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        'Content-Type': 'application/x-www-form-urlencoded'
       },
-      body: `s=${encodeURIComponent(keyword)}&type=10&limit=18&offset=0`
+      body: `s=${encodeURIComponent(keyword)}&type=1&limit=150&offset=0`
     });
     
     const ntData = await ntRes.json();
     
-    if (ntData.result && ntData.result.albums) {
-      // 映射成我们前端需要的数据结构
-      const mappedAlbums = ntData.result.albums.map((a: any) => ({
-        trackId: a.id.toString(),
-        trackName: a.name,
-        artistName: a.artist?.name || keyword,
-        collectionName: '网易云音乐 (Netease)',
-        artworkUrl100: a.picUrl ? `${a.picUrl}?param=500y500` : 'https://picsum.photos/500/500' // 请求网易云500x500高清图
+    if (ntData.result && ntData.result.songs) {
+      // 映射成前端选曲大厅需要的单曲结构
+      const mappedSongs = ntData.result.songs.map((song: any) => ({
+        trackId: song.id.toString(),
+        trackName: song.name,
+        artistName: song.ar?.[0]?.name || keyword,
+        collectionName: song.al?.name || '未知专辑',
+        artworkUrl100: song.al?.picUrl ? `${song.al.picUrl}?param=500y500` : 'https://picsum.photos/500/500' 
       }));
-      return res.json({ results: mappedAlbums });
+      return res.json({ results: mappedSongs });
     }
     
     res.json({ results: [] });
   } catch (err) {
-    console.error('Netease API Error:', err);
-    res.status(500).json({ error: 'Failed to fetch from Netease' });
+    console.error('Netease Web API Error:', err);
+    res.status(500).json({ error: 'Failed to fetch from Netease Web API' });
   }
 });
 
