@@ -1,0 +1,86 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+}
+
+// ==============================================
+// 1. 真实玩家 (Human Fan)
+// ==============================================
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  nickname  String
+  createdAt DateTime @default(now())
+  
+  // 玩家可以捏造多个带有不同职能的 AI 分身
+  avatars   Avatar[]
+}
+
+// ==============================================
+// 2. AI分身 (AI Persona / Agent)
+// ==============================================
+model Avatar {
+  id             String   @id @default(uuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id])
+  
+  name           String   // 分身名称，例如 "Neon Director" 或者 "抑郁编剧"
+  role           String   // 职能属性: DIRECTOR, WRITER, VISUALIZER, AUDIO
+  coreVibe       String   // 粉丝赋予这个分身的“对歌曲的情感理解”
+  systemPrompt   String   // 系统拼接后的底层人格 Prompt
+  
+  createdAt      DateTime @default(now())
+  
+  // 该分身参与的共创对局
+  roomMembers    RoomMember[]
+}
+
+// ==============================================
+// 3. 共创对局 / 匹配大厅 (Collaboration Room)
+// ==============================================
+model Room {
+  id             String   @id @default(uuid())
+  songId         String   // 所有玩家都是基于同一首歌曲进来的
+  status         String   // 状态: MATCHING (匹配中), IN_PROGRESS (共创推演中), COMPLETED (完成)
+  createdAt      DateTime @default(now())
+  
+  members        RoomMember[]
+  messages       Message[]
+}
+
+// 大厅与分身的多对多映射表
+model RoomMember {
+  id        String @id @default(uuid())
+  roomId    String
+  room      Room   @relation(fields: [roomId], references: [id])
+  
+  avatarId  String
+  avatar    Avatar @relation(fields: [avatarId], references: [id])
+  
+  joinedAt  DateTime @default(now())
+
+  // 一场游戏中，同一个分身只能加入一次
+  @@unique([roomId, avatarId])
+}
+
+// ==============================================
+// 4. 共创产物 / 故事板流 (Storyboard Messages)
+// ==============================================
+model Message {
+  id        String   @id @default(uuid())
+  roomId    String
+  room      Room     @relation(fields: [roomId], references: [id])
+  
+  agentRole String   // 发送者的角色: DIRECTOR, WRITER, VISUALIZER, AUDIO, HUMAN, SYSTEM
+  content   String   @db.Text // AI 生成的具体内容
+  metadata  Json?    // 结构化元数据 (如视觉 Tag, BPM 标签, 图片 URL 等)
+  
+  createdAt DateTime @default(now())
+}
