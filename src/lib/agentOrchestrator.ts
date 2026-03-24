@@ -55,7 +55,7 @@ export async function runAgentTurn(songVibe: string) {
 
     // Background push to database
     if (store.roomId) {
-      fetch(`http://localhost:3001/api/rooms/${store.roomId}/messages`, {
+      fetch(`http://localhost:3005/api/rooms/${store.roomId}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ agentRole: nextRole, content: responseText, metadata: meta })

@@ -5,7 +5,7 @@ import { Terminal, Fingerprint, Map } from 'lucide-react';
 export default function Home() {
   const [nickname, setNickname] = useState('');
   const [artist, setArtist] = useState('');
-  const [role, setRole] = useState('DIRECTOR');
+  const [role, setRole] = useState('导演');
   const [mbti, setMbti] = useState('INTJ');
   const navigate = useNavigate();
 
@@ -32,33 +32,38 @@ export default function Home() {
 
         <div className="space-y-6">
           <div>
-            <label className="block text-xs font-mono text-cyan-600 mb-2">/ Agent 分身代号 (NICKNAME)</label>
+            <label className="block text-xs font-mono text-cyan-600 mb-2">/ Agent 分身代号</label>
             <input type="text" value={nickname} onChange={e => setNickname(e.target.value)} placeholder="例如: 赛博流浪汉" className="w-full bg-slate-900 border border-slate-700 text-slate-200 rounded-lg px-4 py-3 focus:outline-none focus:border-cyan-500 transition-colors" />
           </div>
 
           <div>
-            <label className="block text-xs font-mono text-cyan-600 mb-2">/ 主推灵感歌手 (FAVORITE_ARTIST)</label>
+            <label className="block text-xs font-mono text-cyan-600 mb-2">/ 主推灵感歌手</label>
             <input type="text" value={artist} onChange={e => setArtist(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') handleNext() }} placeholder="你想匹配哪位歌手的同好？(例如: 孙燕姿)" className="w-full bg-slate-900 border border-slate-700 text-slate-200 rounded-lg px-4 py-3 focus:outline-none focus:border-cyan-500 transition-colors" />
           </div>
 
           <div>
-            <label className="block text-xs font-mono text-cyan-600 mb-2">/ 专属职能序列 (AVATAR_ROLE)</label>
-            <div className="grid grid-cols-2 gap-3">
-              {['DIRECTOR', 'WRITER', 'VISUALIZER', 'AUDIO'].map(r => (
+            <label className="block text-xs font-mono text-cyan-600 mb-2 flex items-center justify-between">
+              <span>/ 专属职能序列</span>
+            </label>
+            <div className="grid grid-cols-2 gap-3 mb-2">
+              {['导演', '编剧', '视觉', '音频'].map(r => (
                 <button
                   key={r}
                   onClick={() => setRole(r)}
                   className={`py-3 rounded-lg border font-mono text-xs transition-all ${role === r ? 'bg-cyan-900/40 border-cyan-500 text-cyan-400 shadow-[0_0_15px_rgba(6,182,212,0.3)]' : 'bg-slate-900 border-slate-700 text-slate-500 hover:border-slate-500'}`}
                 >
-                  {r === 'DIRECTOR' ? '导演 (DIRECTOR)' : r === 'WRITER' ? '编剧 (WRITER)' : r === 'VISUALIZER' ? '视觉 (VISUAL)' : '音频 (AUDIO)'}
+                  {r}
                 </button>
               ))}
             </div>
+            <p className="text-[10px] text-slate-600 font-mono italic leading-relaxed flex items-start gap-1">
+               <span className="text-cyan-700 font-bold">*</span> 预检提示：仅作初始偏好。正式共创组局时，您随时可跨流派切换职能或跳车更换房间。
+            </p>
           </div>
 
           <div>
             <label className="block text-xs font-mono text-cyan-600 mb-2 flex justify-between">
-              <span>/ MBTI 性格矩阵 (PERSONALITY_MATRIX)</span>
+              <span>/ MBTI 性格矩阵</span>
               <span className="text-slate-600 flex items-center gap-1"><Fingerprint className="w-3 h-3" /> 预留 SecondMe 记忆接口</span>
             </label>
             <select value={mbti} onChange={e => setMbti(e.target.value)} className="w-full bg-slate-900 border border-slate-700 text-slate-200 rounded-lg px-4 py-3 focus:outline-none focus:border-cyan-500 transition-colors appearance-none cursor-pointer">
@@ -94,7 +99,7 @@ export default function Home() {
             className="w-full mt-4 py-4 rounded-lg bg-indigo-900/30 hover:bg-indigo-800/40 border border-indigo-500/50 text-indigo-400 font-bold tracking-widest uppercase transition-all flex justify-center items-center gap-3 relative overflow-hidden group"
           >
             <Map className="w-5 h-5 group-hover:animate-bounce" />
-            <span className="font-mono text-sm">携源参数跃迁至选曲星港 (ENTER_ROOM_LOBBY)</span>
+            <span className="font-mono text-sm">携源参数跃迁至选曲星港</span>
           </button>
         </div>
       </div>

@@ -2,7 +2,8 @@
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "darwin", "darwin-arm64"]
 }
 
 datasource db {
@@ -83,4 +84,23 @@ model Message {
   metadata  Json?    // 结构化元数据 (如视觉 Tag, BPM 标签, 图片 URL 等)
   
   createdAt DateTime @default(now())
+}
+
+// ==============================================
+// 5. 网易云原生曲库持久层缓存 (Netease Cache)
+// ==============================================
+model ArtistSongCache {
+  id             String   @id @default(uuid())
+  artistId       String   
+  trackId        String   @unique
+  trackName      String
+  artistName     String
+  collectionName String
+  artworkUrl100  String
+  audioUrl       String?  // [新增] 允许用户手动注入未收录单曲时附带可直链播放的 MP3 链接
+  
+  cachedAt       DateTime @default(now())
+
+  // 建立联合索引以保障毫秒级的查询速度
+  @@index([artistId])
 }
