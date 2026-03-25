@@ -62,7 +62,7 @@ app.post('/api/custom-song', async (req, res) => {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: `s=${encodeURIComponent(keyword || artistName)}&type=100&limit=1`
-    }).then(r => r.json())) as { result?: { artists?: any[] } };
+    }).then(r => r.json())) as any;
     
     const artist = searchRes.result?.artists?.[0];
     const artistId = artist?.id?.toString() || "0";
@@ -169,7 +169,7 @@ app.get('/api/search', async (req, res) => {
     )) as any[];
 
     if (!forceRefresh && cachedSongs.length > 0) {
-      const pureCached = deduplicateByName(purifySongs(cachedSongs));
+      const pureCached = deduplicateByName(purifySongs(cachedSongs as any[]));
       if (pureCached.length > 0) {
         console.log(`[Cache Hit] Serving ${pureCached.length} absolutely pure songs for artist ${artistId} firmly from Prisma/Xata!`);
         const payload = await attachRealNodes(pureCached);
@@ -261,7 +261,7 @@ app.get('/api/search', async (req, res) => {
     );
     
     // 离岸安全检查，彻底剔除同名异构曲目，确保喂给前端的绝对是 100% 纯净度的数据，并且挂载真实匹配大厅数量
-    const pureFinal = deduplicateByName(purifySongs(finalStoredSongs));
+    const pureFinal = deduplicateByName(purifySongs(finalStoredSongs as any[]));
     const payloadOut = await attachRealNodes(pureFinal);
     console.log(`[DB Sync] Action Complete. Total pure tracks securely synced for artist ${artistId}: ${payloadOut.length}`);
     return res.json({ results: payloadOut });
@@ -399,7 +399,7 @@ app.get('/api/room/:roomId', async (req, res) => {
   try {
     const { roomId } = req.params;
     console.log(`[API] Fetching room state for ${roomId}...`);
-    const room = await prisma.room.findUnique({
+    const room: any = await withPrismaRetry(() => prisma.room.findUnique({
       where: { id: roomId },
       include: {
         members: {
@@ -409,7 +409,7 @@ app.get('/api/room/:roomId', async (req, res) => {
           orderBy: { createdAt: 'asc' } 
         }
       }
-    });
+    }));
     
     if (!room) {
       console.warn(`[API] Room ${roomId} not found.`);
@@ -417,14 +417,22 @@ app.get('/api/room/:roomId', async (req, res) => {
     }
 
     console.log(`[API] Found room ${room.name}, songId: ${room.songId}. Mapping song details...`);
-    const song = await prisma.artistSongCache.findUnique({
-      where: { trackId: room.songId }
-    });
+    
+    // Ensure we don't crash if songId is missing or invalid
+    let song = null;
+    if (room.songId) {
+      song = await withPrismaRetry(() => prisma.artistSongCache.findUnique({
+        where: { trackId: String(room.songId) }
+      })).catch(err => {
+        console.error(`[API] Song detail lookup failed for trackId ${room.songId}:`, err);
+        return null;
+      });
+    }
 
     res.json({ room, song });
-  } catch(e) {
-    console.error(e);
-    res.status(500).json({ error: "DB Error" });
+  } catch(e: any) {
+    console.error(`[API ERROR] Room state retrieval failed for ${req.params.roomId}:`, e);
+    res.status(500).json({ error: "Xata DB Retrieval Error", details: e.message });
   }
 });
 
@@ -434,14 +442,14 @@ app.post('/api/rooms/:roomId/messages', async (req, res) => {
     const { agentRole, content, metadata } = req.body;
     console.log(`[API] Ingesting message for room ${roomId} (Role: ${agentRole})`, { metadata });
     
-    const message = await prisma.message.create({
+    const message = await withPrismaRetry(() => prisma.message.create({
       data: {
         roomId,
         agentRole,
         content,
         metadata: metadata || null
       }
-    });
+    }));
 
     res.json({ message, msg: "Message materialized into Xata Cloud." });
   } catch (e: any) {

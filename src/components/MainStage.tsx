@@ -123,10 +123,12 @@ export default function MainStage() {
             const agentInfo = getAgentInfo(msg.role);
             
             if (msg.role === 'VISUALIZER') {
-              const tag = msg.metadata?.tag || '场景';
-              // Use pollinations.ai to generate an image natively driven by the LLM prompt response
-              const prompt = encodeURIComponent(`Cinematic, 8k resolution, photorealistic, ${songVibe} visual style, highly cohesive, ${tag}, ${msg.content.substring(0, 50)}`);
-              const imgUrl = `https://image.pollinations.ai/prompt/${prompt}?width=1200&height=600&nologo=true`;
+              const tag = msg.metadata?.tag || 'SCENE_IMAGE';
+              // Use pollinations.ai with FLUX model for superior quality
+              // We blend the song vibe, the agent's specific tag, and the first 100 chars of content for maximum relevance
+              const cleanTag = tag.replace(/[\[\]]/g, ''); // Clean any lingering brackets
+              const prompt = encodeURIComponent(`${cleanTag}, ${songVibe} aesthetic, cinematic lighting, 8k resolution, ${msg.content.substring(0, 100).replace(/[\[\]]/g, '')}`);
+              const imgUrl = `https://image.pollinations.ai/prompt/${prompt}?width=1200&height=600&nologo=true&model=flux&seed=${msg.timestamp % 1000}`;
               return (
                 <div key={msg.id} className="relative group">
                   <div className="absolute -left-12 top-0 text-xs font-mono text-slate-600 rotate-90 origin-left">场景快照_0{index+1}</div>
