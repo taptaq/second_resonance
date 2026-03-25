@@ -1,14 +1,31 @@
-import { Play, SkipBack, SkipForward, Volume2, Loader2 } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import { Play, SkipBack, SkipForward, Volume2, Loader2, Pause } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import { useAgentStore } from '../store/useAgentStore';
 
 export default function MainStage() {
-  const { messages, isGenerating } = useAgentStore();
+  const { messages, isGenerating, songInfo, roomInfo, songVibe } = useAgentStore();
   const scrollRef = useRef<HTMLDivElement>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  
+  const audioSrc = songInfo?.audioUrl || songInfo?.previewUrl;
+  const isFull = roomInfo?.members?.length >= 4;
+
+  const togglePlay = () => {
+    if (!audioRef.current || !isFull) return;
+    if (isPlaying) {
+      audioRef.current.pause();
+    } else {
+      audioRef.current.play();
+    }
+  };
 
   useEffect(() => {
     if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      scrollRef.current.scrollTo({
+        top: scrollRef.current.scrollHeight,
+        behavior: 'smooth'
+      });
     }
   }, [messages, isGenerating]);
 
@@ -16,7 +33,7 @@ export default function MainStage() {
     <main className="flex-1 flex flex-col relative bg-[#020202] overflow-hidden">
       <div 
         ref={scrollRef}
-        className="flex-1 overflow-y-auto p-8 pb-32 custom-scrollbar scroll-smooth"
+        className="flex-1 overflow-y-auto p-8 pb-96 custom-scrollbar scroll-smooth"
       >
         <div className="max-w-3xl mx-auto flex flex-col gap-12">
           
@@ -29,7 +46,9 @@ export default function MainStage() {
           {messages.map((msg, index) => {
             if (msg.role === 'VISUALIZER') {
               const tag = msg.metadata?.tag || 'SCENE';
-              const imgUrl = `https://picsum.photos/seed/${msg.id}/800/400`;
+              // Use pollinations.ai to generate an image natively driven by the LLM prompt response
+              const prompt = encodeURIComponent(`Cinematic, 8k resolution, photorealistic, ${songVibe} visual style, highly cohesive, ${tag}, ${msg.content.substring(0, 50)}`);
+              const imgUrl = `https://image.pollinations.ai/prompt/${prompt}?width=1200&height=600&nologo=true`;
               return (
                 <div key={msg.id} className="relative group">
                   <div className="absolute -left-12 top-0 text-xs font-mono text-slate-600 rotate-90 origin-left">场景快照_0{index+1}</div>
@@ -117,14 +136,29 @@ export default function MainStage() {
       </div>
 
       <div className="absolute bottom-0 left-0 right-0 h-24 bg-black/80 backdrop-blur-xl border-t border-slate-800 px-6 flex items-center gap-6 z-20">
+        {audioSrc && (
+          <audio 
+            ref={audioRef} 
+            src={audioSrc} 
+            loop 
+            onPlay={() => setIsPlaying(true)} 
+            onPause={() => setIsPlaying(false)} 
+            onEnded={() => setIsPlaying(false)}
+          />
+        )}
         <div className="flex items-center gap-4">
-          <button className="text-slate-400 hover:text-white transition-colors">
+          <button className="text-slate-600 cursor-not-allowed">
             <SkipBack className="w-5 h-5" />
           </button>
-          <button className={`w-12 h-12 rounded-full ${isGenerating ? 'bg-cyan-500 shadow-[0_0_15px_rgba(6,182,212,0.5)]' : 'bg-slate-700'} text-black flex items-center justify-center transition-all duration-300`}>
-            <Play className={`w-5 h-5 ml-1 ${isGenerating ? 'text-black' : 'text-slate-400'}`} />
+          <button 
+            disabled={!audioSrc || !isFull}
+            onClick={togglePlay}
+            className={`w-12 h-12 rounded-full ${!isFull ? 'bg-slate-800 border border-slate-700 cursor-not-allowed shadow-none' : isPlaying ? 'bg-cyan-500 shadow-[0_0_15px_rgba(6,182,212,0.5)]' : 'bg-slate-700 hover:bg-slate-600'} text-black flex items-center justify-center transition-all duration-300`}
+            title={!isFull ? "满员前播放端口已锁定" : audioSrc ? "播放/暂停音轨" : "未检测到物理音轨载体"}
+          >
+            {isPlaying ? <Pause className="w-5 h-5 text-black" /> : <Play className={`w-5 h-5 ml-1 ${!isFull ? 'text-slate-600' : isPlaying ? 'text-black' : 'text-slate-300'}`} />}
           </button>
-          <button className="text-slate-400 hover:text-white transition-colors">
+          <button className="text-slate-600 cursor-not-allowed">
             <SkipForward className="w-5 h-5" />
           </button>
         </div>
@@ -138,11 +172,11 @@ export default function MainStage() {
           <div className="h-8 w-full flex items-center gap-[2px]">
             {[...Array(120)].map((_, i) => {
               const baseHeight = Math.sin(i * 0.1) * 30 + 40;
-              const height = isGenerating ? baseHeight + (Math.random() * 30 - 15) : 10;
+              const height = isPlaying ? baseHeight + (Math.random() * 30 - 15) : 10;
               return (
                 <div 
                   key={i} 
-                  className={`flex-1 rounded-full transition-all duration-200 ${isGenerating && i % 3 === 0 ? 'bg-cyan-500' : 'bg-slate-700'}`} 
+                  className={`flex-1 rounded-full transition-all duration-200 ${isPlaying && i % 3 === 0 ? 'bg-cyan-500' : 'bg-slate-700'}`} 
                   style={{ height: `${Math.max(10, height)}%` }}
                 ></div>
               );

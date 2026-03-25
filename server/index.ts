@@ -234,9 +234,35 @@ app.get('/api/search', async (req, res) => {
 // 2. A2A 纯盲盒匹配后端 - Prisma 持久层重写
 // ==========================================
 
+app.get('/api/avatars/check', async (req, res) => {
+  try {
+    const { name } = req.query;
+    if (!name) return res.json({ found: false });
+    const avatar = await prisma.avatar.findFirst({
+      where: { name: String(name) },
+      orderBy: { createdAt: 'desc' }
+    });
+    if (avatar) {
+      let artist = "";
+      if (avatar.coreVibe) {
+        const match = avatar.coreVibe.match(/Favorite Artist:\s*([^,]+)/);
+        if (match && match[1]) {
+          artist = match[1].trim();
+        }
+      }
+      res.json({ found: true, mbti: avatar.mbti || "INTJ", role: avatar.role, artist });
+    } else {
+      res.json({ found: false });
+    }
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "DB lookup failed" });
+  }
+});
+
 app.post('/api/avatars', async (req, res) => {
   try {
-    const { name, role, coreVibe } = req.body;
+    const { name, role, coreVibe, mbti } = req.body;
     
     // 建立一个隐式防沉迷主账号（如果你以后想接多用户注册体系，可以换成真实用户 Auth ID）
     let guestUser = await prisma.user.findFirst({ where: { email: 'guest@secondresonance.com' } });
@@ -244,32 +270,143 @@ app.post('/api/avatars', async (req, res) => {
       guestUser = await prisma.user.create({ data: { email: 'guest@secondresonance.com', nickname: 'Guest Commander' } });
     }
 
-    const avatar = await prisma.avatar.create({
-      data: {
-        userId: guestUser.id,
-        name,
-        role,
-        coreVibe,
-        systemPrompt: `SYSTEM PROMPT STUB FOR ${role} / VIBE: ${coreVibe}`
-      }
+    let avatar = await prisma.avatar.findFirst({
+      where: { name }
     });
 
-    res.json({ avatar, msg: `Avatar securely minted to Xata Cloud!` });
+    if (avatar) {
+      avatar = await prisma.avatar.update({
+        where: { id: avatar.id },
+        data: {
+          role,
+          coreVibe,
+          systemPrompt: `SYSTEM PROMPT STUB FOR ${role} / VIBE: ${coreVibe}`,
+          mbti
+        }
+      });
+      res.json({ avatar, msg: `Avatar identity verified and parameters synced to Xata Cloud!` });
+    } else {
+      avatar = await prisma.avatar.create({
+        data: {
+          userId: guestUser.id,
+          name,
+          role,
+          coreVibe,
+          systemPrompt: `SYSTEM PROMPT STUB FOR ${role} / VIBE: ${coreVibe}`,
+          mbti
+        }
+      });
+      res.json({ avatar, msg: `Avatar securely minted to Xata Cloud!` });
+    }
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: "Xata DB Error" });
   }
 });
 
-app.post('/api/match', async (req, res) => {
+app.get('/api/rooms/:songId', async (req, res) => {
+  try {
+    const { songId } = req.params;
+    
+    const rooms = await prisma.room.findMany({
+      where: { songId, status: 'MATCHING' },
+      include: { 
+        members: {
+          include: { avatar: true }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    res.json({ rooms });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "Xata DB Error" });
+  }
+});
+
+app.get('/api/room/:roomId', async (req, res) => {
+  try {
+    const { roomId } = req.params;
+    const room = await prisma.room.findUnique({
+      where: { id: roomId },
+      include: {
+        members: {
+          include: { avatar: true }
+        },
+        messages: { 
+          orderBy: { createdAt: 'asc' } 
+        }
+      }
+    });
+    
+    if (!room) return res.status(404).json({ error: "Room not found" });
+
+    // Fetch the song detail from the trackId
+    const song = await prisma.artistSongCache.findUnique({
+      where: { trackId: room.songId }
+    });
+
+    res.json({ room, song });
+  } catch(e) {
+    console.error(e);
+    res.status(500).json({ error: "DB Error" });
+  }
+});
+
+app.post('/api/rooms/:roomId/messages', async (req, res) => {
+  try {
+    const { roomId } = req.params;
+    const { agentRole, content, metadata } = req.body;
+    
+    const message = await prisma.message.create({
+      data: {
+        roomId,
+        agentRole,
+        content,
+        metadata: metadata || null
+      }
+    });
+
+    res.json({ message, msg: "Message materialized into Xata Cloud." });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "Xata DB Error" });
+  }
+});
+
+app.delete('/api/rooms/:roomId/messages', async (req, res) => {
+  try {
+    const { roomId } = req.params;
+    
+    // Hard Reboot: Wipe the entire simulation memory array from the Xata PostgreSQL table
+    const result = await prisma.message.deleteMany({
+      where: { roomId }
+    });
+
+    res.json({ success: true, deletedCount: result.count, msg: "Simulation timeline completely erased." });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "Failed to perform Hard Reboot on DB" });
+  }
+});
+
+app.post('/api/room/create', async (req, res) => {
   try {
     const { avatarId, songId } = req.body;
     
+    const song = await prisma.artistSongCache.findUnique({ where: { trackId: songId }});
+    const trackName = song?.trackName || "Unknown Track";
+    const existingRoomsCount = await prisma.room.count({ where: { songId } });
+    const sequence = (existingRoomsCount + 1).toString().padStart(3, '0');
+    const roomName = `${trackName} - ${sequence}`;
+
     // 创建一场绝对中立的星际共创大厦对局
     const room = await prisma.room.create({
       data: {
         songId,
-        status: 'MATCHING'
+        status: 'MATCHING',
+        name: roomName
       }
     });
 
@@ -285,6 +422,48 @@ app.post('/api/match', async (req, res) => {
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: "Xata DB Error" });
+  }
+});
+
+app.post('/api/room/join', async (req, res) => {
+  try {
+    const { avatarId, roomId } = req.body;
+    
+    // 检查房间是否处于可匹配状态
+    const room = await prisma.room.findUnique({
+      where: { id: roomId },
+      include: { members: { include: { avatar: true } } }
+    });
+
+    if (!room) return res.status(404).json({ error: "未找到指定的星际对战室频段。" });
+    if (room.status !== 'MATCHING') return res.status(400).json({ error: "该对局室已发车或坠毁，无法锚定。" });
+    if (room.members.length >= 4) return res.status(400).json({ error: "对战室坑位已满载。" });
+
+    // 严防该职能已被占用（比如已经有一个导演了，就不能再加导演）
+    // 或者同一台机器的用户重复点击
+    const avatarToJoin = await prisma.avatar.findUnique({ where: { id: avatarId } });
+    if (!avatarToJoin) return res.status(404).json({ error: "未找到您的分身投影数据。" });
+
+    if (room.members.some(m => m.avatarId === avatarId)) {
+       return res.status(400).json({ error: "您的分身早已存在于该对战室序列中。" });
+    }
+
+    if (room.members.some(m => m.avatar.role === avatarToJoin.role)) {
+       return res.status(400).json({ error: "对局中已存在相同职能的创作者，请更换职能或寻找其他房间。" });
+    }
+
+    // 正式把玩家的分身硬写入大厅席位
+    await prisma.roomMember.create({
+      data: {
+        roomId,
+        avatarId
+      }
+    });
+
+    res.json({ room, msg: "Successfully spliced into the Lobby." });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "Xata DB Error / Join Conflict" });
   }
 });
 

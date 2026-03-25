@@ -1,3 +1,5 @@
+/// <reference types="vite/client" />
+
 export type ProviderType = 'DEEPSEEK' | 'MINIMAX' | 'QWEN';
 
 export async function generateContent(provider: ProviderType, systemPrompt: string, userPrompt: string): Promise<string> {
@@ -7,17 +9,17 @@ export async function generateContent(provider: ProviderType, systemPrompt: stri
   
   if (provider === 'DEEPSEEK') {
     url = 'https://api.deepseek.com/chat/completions';
-    apiKey = process.env.DEEPSEEK_API_KEY || '';
+    apiKey = import.meta.env.VITE_DEEPSEEK_API_KEY || '';
     modelName = 'deepseek-chat';
   } else if (provider === 'MINIMAX') {
     // Minimax provides an OpenAI-compatible v2 endpoint
     url = 'https://api.minimax.chat/v1/text/chatcompletion_v2';
-    apiKey = process.env.MINIMAX_API_KEY || '';
+    apiKey = import.meta.env.VITE_MINIMAX_API_KEY || '';
     modelName = 'abab6.5s-chat';
   } else if (provider === 'QWEN') {
     // Aliyun DashScope OpenAI-compatible endpoint
     url = 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions';
-    apiKey = process.env.QWEN_API_KEY || '';
+    apiKey = import.meta.env.VITE_QWEN_API_KEY || '';
     modelName = 'qwen-plus';
   }
 

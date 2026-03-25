@@ -36,6 +36,7 @@ model Avatar {
   role           String   // 职能属性: DIRECTOR, WRITER, VISUALIZER, AUDIO
   coreVibe       String   // 粉丝赋予这个分身的“对歌曲的情感理解”
   systemPrompt   String   // 系统拼接后的底层人格 Prompt
+  mbti           String?  // [新增] 存储用户先天性格以便回显
   
   createdAt      DateTime @default(now())
   
@@ -48,6 +49,7 @@ model Avatar {
 // ==============================================
 model Room {
   id             String   @id @default(uuid())
+  name           String?  // 用户自定义房间名
   songId         String   // 所有玩家都是基于同一首歌曲进来的
   status         String   // 状态: MATCHING (匹配中), IN_PROGRESS (共创推演中), COMPLETED (完成)
   createdAt      DateTime @default(now())

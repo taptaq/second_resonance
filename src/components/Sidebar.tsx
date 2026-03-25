@@ -11,9 +11,18 @@ const AGENTS = [
 ];
 
 export default function Sidebar() {
-  const { messages, isGenerating } = useAgentStore();
+  const { messages, isGenerating, roomInfo } = useAgentStore();
   
   const lastMsg = messages[messages.length - 1];
+
+  // Map real members from the database room state
+  const getAgentData = (baseAgent: any) => {
+    const roleMap: Record<string, string> = { 'DIRECTOR': '导演', 'WRITER': '编剧', 'VISUALIZER': '视觉', 'AUDIO': '音频' };
+    const member = roomInfo?.members?.find((m: any) => m.avatar?.role === baseAgent.role || m.avatar?.role === roleMap[baseAgent.role]);
+    const isHost = member && roomInfo?.members?.[0]?.avatar?.id === member.avatar.id;
+    if (!member) return { ...baseAgent, status: '空缺未连接', isConnected: false, overrideName: '等待投影接入...', isHost: false };
+    return { ...baseAgent, status: getStatus(baseAgent.role), isConnected: true, overrideName: member.avatar.name, isHost };
+  };
 
   const getStatus = (role: string) => {
     if (isGenerating) {
@@ -33,14 +42,15 @@ export default function Sidebar() {
         联合演播智能体网络状态
       </div>
       
-      {AGENTS.map((agent) => (
-        <AgentCard key={agent.id} agent={agent} status={getStatus(agent.role)} />
-      ))}
+      {AGENTS.map((agent) => {
+        const enrichedAgent = getAgentData(agent);
+        return <AgentCard key={agent.id} agent={enrichedAgent} status={enrichedAgent.status} isConnected={enrichedAgent.isConnected} />
+      })}
     </aside>
   );
 }
 
-const AgentCard: React.FC<{ agent: any, status: string }> = ({ agent, status }) => {
+const AgentCard: React.FC<{ agent: any, status: string, isConnected: boolean }> = ({ agent, status, isConnected }) => {
   const isConflict = status === '冲突投票决议中';
   const isGenerating = status.includes('中');
 
@@ -54,22 +64,30 @@ const AgentCard: React.FC<{ agent: any, status: string }> = ({ agent, status }) 
 
       <div className="flex items-start gap-3 relative z-10">
         <div className="relative shrink-0">
-          <img src={agent.avatar} alt={agent.name} className="w-10 h-10 rounded-md object-cover border border-slate-700 grayscale contrast-125" referrerPolicy="no-referrer" />
+          <img src={agent.avatar} alt={agent.overrideName} className={`w-10 h-10 rounded-md object-cover border border-slate-700 transition-all ${isConnected ? 'grayscale-0 contrast-125' : 'grayscale opacity-30'}`} referrerPolicy="no-referrer" />
           <div className="absolute -bottom-1 -right-1 bg-black rounded-full p-0.5 border border-slate-800">
-            <agent.icon className="w-3 h-3 text-cyan-500" />
+            <agent.icon className={`w-3 h-3 ${isConnected ? 'text-cyan-500' : 'text-slate-600'}`} />
           </div>
         </div>
         
         <div className="flex-1 min-w-0">
-          <div className="flex justify-between items-center mb-1">
-            <h3 className="text-sm font-medium text-slate-200 truncate">{agent.name}</h3>
-            <span className="text-[9px] font-mono px-1.5 py-0.5 bg-slate-800 text-slate-400 rounded shrink-0 ml-2">{agent.mbti}</span>
+          <div className="flex justify-between items-center mb-1 gap-2">
+            <div className="flex items-center gap-2 overflow-hidden">
+              <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded shrink-0 ${isConnected ? 'bg-cyan-950/50 text-cyan-400 border border-cyan-800/50' : 'bg-slate-800 text-slate-500 border border-slate-700'}`}>
+                {agent.name.split(' ')[0]}
+              </span>
+              <h3 className={`text-sm font-medium truncate ${isConnected ? 'text-slate-200' : 'text-slate-600'}`}>
+                {agent.overrideName}
+              </h3>
+              {agent.isHost && <span className="text-[9px] font-bold font-mono px-1 py-0.5 bg-amber-900/40 text-amber-500 border border-amber-700/50 rounded shrink-0">房主</span>}
+            </div>
+            {isConnected && <span className="text-[9px] font-mono px-1.5 py-0.5 bg-slate-800 text-slate-400 rounded shrink-0">{agent.mbti}</span>}
           </div>
           
           <div className="flex items-center gap-2 mt-2">
             {isConflict && <AlertTriangle className="w-3 h-3 text-rose-500 shrink-0" />}
-            {isGenerating && <div className="w-3 h-3 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin shrink-0"></div>}
-            {!isConflict && !isGenerating && <div className={`w-2 h-2 rounded-full shrink-0 ${status === '就绪' ? 'bg-emerald-500' : 'bg-slate-600'}`}></div>}
+            {isGenerating && isConnected && <div className="w-3 h-3 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin shrink-0"></div>}
+            {!isConflict && !isGenerating && <div className={`w-2 h-2 rounded-full shrink-0 ${status === '空缺未连接' ? 'bg-slate-800 border border-slate-700' : status === '就绪' ? 'bg-emerald-500' : 'bg-slate-600'}`}></div>}
             <span className={`text-xs font-mono truncate ${isConflict ? 'text-rose-400' : isGenerating ? 'text-cyan-400' : 'text-slate-500'}`}>
               {status}
             </span>

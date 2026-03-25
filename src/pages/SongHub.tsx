@@ -124,6 +124,7 @@ export default function SongHub() {
     const generatedVibe = `MBTI: ${state.mbti}, Favorite Artist: ${state.artist}, Track: ${selectedSong.trackName}`;
 
     try {
+      // 1. 提前在极点注册分身参数（进入大厅时必须携带物理认证身份）
       const avRes = await fetch("http://localhost:3005/api/avatars", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -131,30 +132,22 @@ export default function SongHub() {
           name: state.nickname,
           role: state.role,
           coreVibe: generatedVibe,
+          mbti: state.mbti,
         }),
       }).then((r) => r.json());
 
       if (avRes.avatar?.id) setAvatarId(avRes.avatar.id);
 
-      const matchRes = await fetch("http://localhost:3005/api/match", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          avatarId: avRes.avatar?.id,
-          songId: selectedSong.trackId.toString(),
-        }),
-      }).then((r) => r.json());
-
-      if (matchRes.room?.id) setRoomId(matchRes.room.id);
-
       // Pass the fully formatted track identity string down as the live Engine logic parameter
       setSongVibe(`《${selectedSong.trackName}》- ${state.artist}`);
 
-      // Successfully matched -> Secure gateway into Dashboard!
-      navigate(`/room/${matchRes.room?.id}`);
+      // 2. 取代直接硬建房间：安全重定向至该单曲专属的星际匹配大厅 (Lobby)
+      navigate(`/lobby/${selectedSong.trackId}`, {
+        state: { ...state, selectedSong, avatarId: avRes.avatar?.id },
+      });
     } catch (err) {
       console.error(err);
-      alert("连接匹配集群失败，尝试运行 npm run dev启动后端服务。");
+      alert("身份核验系统离线，尝试运行 npm run dev 启动后端服务。");
       setIsMatching(false);
     }
   };
