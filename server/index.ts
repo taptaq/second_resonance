@@ -9,6 +9,32 @@ app.use(express.json());
 const PORT = 3005;
 const prisma = new PrismaClient();
 
+// --- TypeScript Interfaces for Netease API ---
+interface NeteaseSong {
+  id: number | string;
+  name: string;
+  artists?: { name: string }[];
+  ar?: { name: string }[];
+  picUrl?: string;
+  al?: { picUrl: string; name: string };
+}
+
+interface NeteaseSearchResponse {
+  result?: {
+    artists?: { id: number; name: string }[];
+    songs?: NeteaseSong[];
+  };
+}
+
+interface NeteaseAlbumResponse {
+  album?: {
+    songs?: NeteaseSong[];
+    picUrl?: string;
+    name?: string;
+  };
+  songs?: NeteaseSong[];
+}
+
 // 🚀 【核心网络盾牌】：专治跨境连接 Xata/Postgres 时的间歇性 TCP 握手丢包
 async function withPrismaRetry<T>(operation: () => Promise<T>, maxRetries = 3): Promise<T> {
   for (let i = 0; i < maxRetries; i++) {
@@ -32,11 +58,11 @@ app.post('/api/custom-song', async (req, res) => {
     if (!trackName) return res.status(400).json({ error: "Missing track name" });
 
     // Step 1: 解析主唱的官方网易云 ID（以便与原曲库无缝合群）
-    const searchRes = await fetch('http://music.163.com/api/search/get/', {
+    const searchRes = (await fetch('http://music.163.com/api/search/get/', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: `s=${encodeURIComponent(keyword || artistName)}&type=100&limit=1`
-    }).then(r => r.json());
+    }).then(r => r.json())) as { result?: { artists?: any[] } };
     
     const artist = searchRes.result?.artists?.[0];
     const artistId = artist?.id?.toString() || "0";
@@ -64,6 +90,25 @@ app.post('/api/custom-song', async (req, res) => {
   }
 });
 
+app.post('/api/update-song-audio', async (req, res) => {
+  try {
+    const { trackId, audioUrl } = req.body;
+    if (!trackId) return res.status(400).json({ error: "Missing trackId" });
+
+    const updated = await withPrismaRetry(() => 
+      prisma.artistSongCache.update({
+        where: { trackId: String(trackId) },
+        data: { audioUrl }
+      })
+    );
+
+    res.json({ success: true, track: updated });
+  } catch (err: any) {
+    console.error('Update Audio Error:', err);
+    res.status(500).json({ error: "Failed to update audio URL." });
+  }
+});
+
 // --- 新增：网易云音乐 Web 原生单曲全量检索 ---
 app.get('/api/search', async (req, res) => {
   try {
@@ -72,13 +117,13 @@ app.get('/api/search', async (req, res) => {
     if (!keyword) return res.json({ results: [] });
 
     // Step 1: 先根据名字拿到真实的歌手 ID (网易云内部 artistId)
-    const searchRes = await fetch('http://music.163.com/api/search/get/', {
+    const searchRes = (await fetch('http://music.163.com/api/search/get/', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: `s=${encodeURIComponent(keyword)}&type=100&limit=1` 
-    }).then(r => r.json());
+    }).then(r => r.json())) as any;
     
-    const artist = searchRes.result?.artists?.[0];
+    const artist = (searchRes as any).result?.artists?.[0];
     const artistId = artist?.id?.toString();
     const officialArtistName = artist?.name || keyword;
     
@@ -103,24 +148,25 @@ app.get('/api/search', async (req, res) => {
 
     // 定义真实数据外挂引擎（从 Prisma 统计真实的 Room 大厅匹配队列数量）
     const attachRealNodes = async (songs: any[]) => {
-      if (songs.length === 0) return [];
-      const trackIds = songs.map(s => s.trackId);
+      const typedSongs = songs as any[]; 
+      if (typedSongs.length === 0) return [];
+      const trackIds = typedSongs.map(s => s.trackId);
       const roomCounts = await prisma.room.groupBy({
         by: ['songId'],
         where: { songId: { in: trackIds } },
         _count: { id: true }
       });
       const cntMap = new Map(roomCounts.map(r => [r.songId, r._count.id]));
-      return songs.map(s => ({ ...s, realNodes: cntMap.get(s.trackId) || 0 }));
+      return typedSongs.map(s => ({ ...s, realNodes: cntMap.get(s.trackId) || 0 }));
     };
 
     // 🚀 【核心优化】：使用正式版 Prisma 云端缓存持久层，并外挂自动重试防摔断装甲
-    const cachedSongs = await withPrismaRetry(() => 
+    const cachedSongs = (await withPrismaRetry(() => 
       prisma.artistSongCache.findMany({
         where: { artistId },
         orderBy: { cachedAt: 'desc' }
       })
-    );
+    )) as any[];
 
     if (!forceRefresh && cachedSongs.length > 0) {
       const pureCached = deduplicateByName(purifySongs(cachedSongs));
@@ -136,10 +182,10 @@ app.get('/api/search', async (req, res) => {
 
     // Step 2: 获取该歌手名下的所有专辑（按用户要求，最大拉取 100 张专辑）
     // 对应你提到的获取歌手专辑接口需求
-    const albumsRes = await fetch(`http://music.163.com/api/artist/albums/${artistId}?limit=100&offset=0`, {
+    const albumsRes = (await fetch(`http://music.163.com/api/artist/albums/${artistId}?limit=100&offset=0`, {
       method: 'GET',
       headers: { 'User-Agent': 'Mozilla/5.0' }
-    }).then(r => r.json());
+    }).then(r => r.json())) as any;
 
     const albums = albumsRes.hotAlbums || [];
     const allSongs: any[] = [];
@@ -155,15 +201,15 @@ app.get('/api/search', async (req, res) => {
         try {
           const detailRes = await fetch(`http://music.163.com/api/album/${album.id}`, {
             headers: { 'User-Agent': 'Mozilla/5.0' },
-            signal: AbortSignal.timeout(8000) 
+            signal: (AbortSignal as any).timeout(8000) 
           });
-          const detailData = await detailRes.json();
+          const detailData = (await detailRes.json()) as NeteaseAlbumResponse;
           
-          if (detailData.album && (detailData.album.songs || detailData.songs)) {
-            const songs = detailData.album.songs || detailData.songs;
+          if (detailData.album && ((detailData as any).album.songs || detailData.songs)) {
+            const songs = (detailData as any).album.songs || detailData.songs || [];
             const coverUrl = detailData.album.picUrl || album.picUrl;
             
-            songs.forEach((song: any) => {
+            songs.forEach((song: NeteaseSong) => {
               allSongs.push({
                 trackId: song.id ? song.id.toString() : `UNKNOWN_${Math.random()}`,
                 trackName: song.name || "Unknown Track",
@@ -260,6 +306,30 @@ app.get('/api/avatars/check', async (req, res) => {
   }
 });
 
+app.get('/api/avatars/:id/recent-songs', async (req, res) => {
+  try {
+    const { id } = req.params;
+    // Get unique song IDs from RoomMembers this avatar joined
+    const memberships = await prisma.roomMember.findMany({
+      where: { avatarId: id },
+      include: { room: true },
+      orderBy: { joinedAt: 'desc' },
+      take: 15 // Check more to ensure we get unique songs
+    });
+
+    const uniqueSongIds = Array.from(new Set(memberships.map(m => m.room.songId))).slice(0, 5);
+    
+    const songs = await prisma.artistSongCache.findMany({
+      where: { trackId: { in: uniqueSongIds } }
+    });
+
+    res.json({ songs });
+  } catch (e) {
+    console.error("Failed to fetch avatar history:", e);
+    res.status(500).json({ error: "DB Error" });
+  }
+});
+
 app.post('/api/avatars', async (req, res) => {
   try {
     const { name, role, coreVibe, mbti } = req.body;
@@ -328,6 +398,7 @@ app.get('/api/rooms/:songId', async (req, res) => {
 app.get('/api/room/:roomId', async (req, res) => {
   try {
     const { roomId } = req.params;
+    console.log(`[API] Fetching room state for ${roomId}...`);
     const room = await prisma.room.findUnique({
       where: { id: roomId },
       include: {
@@ -340,9 +411,12 @@ app.get('/api/room/:roomId', async (req, res) => {
       }
     });
     
-    if (!room) return res.status(404).json({ error: "Room not found" });
+    if (!room) {
+      console.warn(`[API] Room ${roomId} not found.`);
+      return res.status(404).json({ error: "Room not found" });
+    }
 
-    // Fetch the song detail from the trackId
+    console.log(`[API] Found room ${room.name}, songId: ${room.songId}. Mapping song details...`);
     const song = await prisma.artistSongCache.findUnique({
       where: { trackId: room.songId }
     });
@@ -358,6 +432,7 @@ app.post('/api/rooms/:roomId/messages', async (req, res) => {
   try {
     const { roomId } = req.params;
     const { agentRole, content, metadata } = req.body;
+    console.log(`[API] Ingesting message for room ${roomId} (Role: ${agentRole})`, { metadata });
     
     const message = await prisma.message.create({
       data: {
@@ -369,9 +444,9 @@ app.post('/api/rooms/:roomId/messages', async (req, res) => {
     });
 
     res.json({ message, msg: "Message materialized into Xata Cloud." });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Xata DB Error" });
+  } catch (e: any) {
+    console.error(`[API ERROR] Message persistence failed for room ${req.params.roomId}:`, e);
+    res.status(500).json({ error: "Xata DB Error", details: e.message });
   }
 });
 
@@ -381,7 +456,7 @@ app.delete('/api/rooms/:roomId/messages', async (req, res) => {
     
     // Hard Reboot: Wipe the entire simulation memory array from the Xata PostgreSQL table
     const result = await prisma.message.deleteMany({
-      where: { roomId }
+      where: { roomId, agentRole: { not: 'CHAT' } }
     });
 
     res.json({ success: true, deletedCount: result.count, msg: "Simulation timeline completely erased." });

@@ -9,16 +9,58 @@ import {
   RefreshCw,
   Search,
   Plus,
+  Link as LinkIcon,
+  AlertTriangle,
 } from "lucide-react";
 
 export default function SongHub() {
   const location = useLocation();
   const navigate = useNavigate();
+
+  // Custom CSS for premium animations
+  const customStyles = `
+    @keyframes scan {
+      0% { top: -100%; }
+      100% { top: 200%; }
+    }
+    @keyframes neon-pulse {
+      0%, 100% { box-shadow: 0 0 20px rgba(6, 182, 212, 0.4), 0 0 40px rgba(6, 182, 212, 0.2); }
+      50% { box-shadow: 0 0 40px rgba(6, 182, 212, 0.7), 0 0 60px rgba(6, 182, 212, 0.4); }
+    }
+    .selection-scan::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      width: 100%;
+      height: 40px;
+      background: linear-gradient(to bottom, transparent, rgba(6, 182, 212, 0.8), transparent);
+      opacity: 0.5;
+      animation: scan 3s linear infinite;
+      pointer-events: none;
+      z-index: 20;
+    }
+    .premium-card-shadow {
+      box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.7);
+    }
+    .selected-glow {
+      animation: neon-pulse 2s ease-in-out infinite;
+    }
+    @keyframes fade-in-up {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .stagger-entry {
+      animation: fade-in-up 0.6s ease-out forwards;
+      opacity: 0;
+    }
+  `;
+
   const state = location.state as {
     nickname: string;
     artist: string;
     role: string;
     mbti: string;
+    thought?: string;
   };
 
   const [songs, setSongs] = useState<any[]>([]);
@@ -36,6 +78,11 @@ export default function SongHub() {
     artworkUrl100: "",
     audioUrl: "",
   });
+  // 新增：编辑已有音频链接态
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingTrack, setEditingTrack] = useState<any>(null);
+  const [editLink, setEditLink] = useState("");
+  const [isUpdatingLink, setIsUpdatingLink] = useState(false);
 
   const { setSongVibe, setAvatarId, setRoomId } = useAgentStore();
 
@@ -110,7 +157,7 @@ export default function SongHub() {
       }
     } catch (err) {
       console.error(err);
-      alert("最新协议同步失败，网关未响应。");
+      alert("同步失败，请重试。");
     } finally {
       setIsRefreshing(false);
       setIsLoading(false); // 恢复曲库网格展示
@@ -118,10 +165,10 @@ export default function SongHub() {
   };
 
   const handleMatch = async () => {
-    if (!selectedSong) return alert("必须选中您的同频共振曲目后方可发车！");
+    if (!selectedSong) return alert("请先选择一首曲目再继续！");
     setIsMatching(true);
 
-    const generatedVibe = `MBTI: ${state.mbti}, Favorite Artist: ${state.artist}, Track: ${selectedSong.trackName}`;
+    const generatedVibe = `MBTI: ${state.mbti}, Favorite Artist: ${state.artist}, Track: ${selectedSong.trackName}${state.thought ? `, 附加人类潜意识指导: ${state.thought}` : ""}`;
 
     try {
       // 1. 提前在极点注册分身参数（进入大厅时必须携带物理认证身份）
@@ -147,7 +194,7 @@ export default function SongHub() {
       });
     } catch (err) {
       console.error(err);
-      alert("身份核验系统离线，尝试运行 npm run dev 启动后端服务。");
+      alert("进入失败，请检查网络或后端状态。");
       setIsMatching(false);
     }
   };
@@ -180,13 +227,49 @@ export default function SongHub() {
           audioUrl: "",
         });
       } else {
-        alert("碎片注入失败，请检查机房网关。");
+        alert("添加失败，请重试。");
       }
     } catch (err) {
       console.error(err);
-      alert("碎片注入遭遇异常断连。");
+      alert("添加过程遇到异常。");
     } finally {
       setIsUploading(false);
+    }
+  };
+
+  const handleEditSubmit = async () => {
+    if (!editingTrack) return;
+    setIsUpdatingLink(true);
+    try {
+      const res = await fetch("http://localhost:3005/api/update-song-audio", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          trackId: editingTrack.trackId,
+          audioUrl: editLink.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        // 更新本地列表状态
+        setSongs(
+          songs.map((s) =>
+            s.trackId === editingTrack.trackId
+              ? { ...s, audioUrl: editLink.trim() }
+              : s,
+          ),
+        );
+        setIsEditModalOpen(false);
+        setEditingTrack(null);
+        setEditLink("");
+      } else {
+        alert("更新失败，请重试。");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("更新过程由异常中断。");
+    } finally {
+      setIsUpdatingLink(false);
     }
   };
 
@@ -196,6 +279,7 @@ export default function SongHub() {
 
   return (
     <div className="min-h-screen bg-[#050505] p-8 flex flex-col font-sans relative">
+      <style>{customStyles}</style>
       <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-cyan-500 to-transparent"></div>
 
       <div className="max-w-6xl mx-auto w-full flex-1 flex flex-col relative z-10">
@@ -209,10 +293,8 @@ export default function SongHub() {
             </button>
             <div>
               <h1 className="text-3xl font-bold tracking-widest text-slate-200 uppercase">
-                选曲星港{" "}
-                <span className="text-cyan-500 font-mono">
-                  /[{state.artist}]
-                </span>
+                选择推演曲目{" "}
+                <span className="text-cyan-500 font-mono">/[TRACKS]</span>
               </h1>
               <div className="flex flex-wrap items-center gap-3 mt-3 text-xs font-mono text-slate-500 uppercase">
                 <span className="px-2 py-1 bg-slate-800 rounded border border-slate-700">
@@ -244,7 +326,7 @@ export default function SongHub() {
                     className={`w-3.5 h-3.5 group-hover:rotate-180 transition-transform duration-500 ${isRefreshing ? "animate-spin" : ""}`}
                   />
                   <span className="relative z-10">
-                    {isRefreshing ? "协议同步中..." : "全网强制同步"}
+                    {isRefreshing ? "同步中..." : "全网同步曲目"}
                   </span>
                   {!isRefreshing && (
                     <div className="absolute inset-0 bg-gradient-to-r from-transparent via-cyan-400/10 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000"></div>
@@ -270,6 +352,23 @@ export default function SongHub() {
                 : "请等待并锁定一首共频曲目..."}
             </span>
           </button>
+        </div>
+
+        {/* ================= 版权与 VIP 风险警示 ================= */}
+        <div className="mb-8 p-4 bg-amber-950/20 border border-amber-900/30 rounded-xl flex items-start gap-4 animate-pulse-subtle shadow-[0_0_20px_rgba(245,158,11,0.05)]">
+          <div className="w-10 h-10 rounded-lg bg-amber-900/40 flex items-center justify-center shrink-0 border border-amber-800/50">
+            <AlertTriangle className="w-6 h-6 text-amber-500" />
+          </div>
+          <div className="flex-1 text-sm text-amber-200/80 leading-relaxed py-1">
+            部分{" "}
+            <span className="text-amber-400 font-bold">VIP 或版权受限</span>{" "}
+            歌曲在公共解析环境下仅能试听 30 秒。
+            如果进入推演房间后音频意外中断，请返回此处点击歌曲卡片右上角的{" "}
+            <span className="text-cyan-400 font-bold font-mono text-[11px] bg-cyan-950/30 px-1 border border-cyan-800/50 rounded">
+              AUTO_LINK
+            </span>{" "}
+            按钮，手动注入该曲目的全长 MP3 直链。
+          </div>
         </div>
 
         {/* ================= 曲库核心工具栏 ================= */}
@@ -321,7 +420,7 @@ export default function SongHub() {
                 正在建立云端核心数据连接
               </span>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6 custom-scrollbar overflow-hidden pb-12 shrink-0 opacity-10 blur-sm pointer-events-none transition-all duration-1000">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-10 custom-scrollbar overflow-hidden px-8 py-10 pb-20 shrink-0 opacity-10 blur-sm pointer-events-none transition-all duration-1000">
               {Array.from({ length: 18 }).map((_, i) => (
                 <div
                   key={i}
@@ -344,63 +443,111 @@ export default function SongHub() {
               : `在本地的 ${songs.length} 首缓存数据中，未能根据指纹 "${searchTerm}" 找到匹配项。`}
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6 custom-scrollbar overflow-y-auto pb-12 shrink-0">
-            {filteredSongs.map((track) => {
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-10 custom-scrollbar overflow-y-auto px-8 py-10 pb-20 shrink-0">
+            {filteredSongs.map((track, index) => {
               const isSelected = selectedSong?.trackId === track.trackId;
               return (
                 <div
                   key={track.trackId}
                   onClick={() => setSelectedSong(track)}
-                  className={`relative rounded-xl overflow-hidden cursor-pointer group transition-all duration-300 transform hover:-translate-y-2 ${isSelected ? "shadow-[0_0_30px_rgba(6,182,212,0.6)] ring-4 ring-cyan-500 bg-cyan-900/20" : "shadow-xl hover:shadow-[0_20px_40px_rgba(0,0,0,0.5)] border border-slate-800 bg-slate-900"}`}
+                  style={{ animationDelay: `${index * 50}ms` }}
+                  className={`stagger-entry relative rounded-xl overflow-hidden cursor-pointer group transition-all duration-500 transform hover:-translate-y-3 ${
+                    isSelected
+                      ? "selected-glow ring-2 ring-cyan-500 bg-cyan-950/40 selection-scan z-20 scale-[1.05]"
+                      : "premium-card-shadow border border-slate-800/80 bg-slate-900/50 hover:bg-slate-800/80 hover:border-slate-600"
+                  }`}
                 >
-                  <div className="overflow-hidden aspect-square border-b border-slate-800">
+                  <div className="overflow-hidden aspect-square relative">
+                    {/* Desaturation to Vibrance Layer */}
                     <img
                       src={track.artworkUrl100.replace("100x100", "600x600")}
                       alt={track.trackName}
-                      className={`w-full h-full object-cover transition-all duration-700 ${isSelected ? "scale-110 saturate-150" : "opacity-80 group-hover:opacity-100 group-hover:scale-110 saturate-50"}`}
+                      className={`w-full h-full object-cover transition-all duration-700 ease-out ${
+                        isSelected
+                          ? "scale-110 saturate-[1.6] contrast-[1.1]"
+                          : "opacity-60 saturate-[0.15] contrast-[0.9] group-hover:opacity-100 group-hover:saturate-[1.1] group-hover:scale-110 group-hover:contrast-[1.05]"
+                      }`}
                     />
+
+                    {/* Interior Vignette for depth */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/20 opacity-60 group-hover:opacity-40 transition-opacity"></div>
                   </div>
 
-                  {isSelected && (
-                    <div className="absolute top-0 left-0 w-full h-full border-2 border-cyan-400 opacity-50 pointer-events-none rounded-xl"></div>
-                  )}
+                  {/* Top Badges */}
+                  <div className="absolute top-2.5 left-2.5 right-2.5 z-30 flex items-center justify-between pointer-events-none">
+                    <div
+                      className={`flex items-center gap-1.5 px-2 py-0.5 backdrop-blur-md rounded border transition-all duration-300 pointer-events-auto ${
+                        isSelected
+                          ? "bg-cyan-500/20 border-cyan-400 shadow-[0_0_15px_rgba(6,182,212,0.4)]"
+                          : "bg-black/40 border-slate-700/50 group-hover:border-slate-500 group-hover:bg-black/60"
+                      }`}
+                    >
+                      <Headphones
+                        className={`w-3 h-3 ${
+                          isSelected
+                            ? "text-cyan-400 animate-pulse"
+                            : "text-slate-400 group-hover:text-cyan-400"
+                        }`}
+                      />
+                      <span
+                        className={`text-[9px] font-mono font-bold tracking-tighter ${
+                          isSelected
+                            ? "text-cyan-300"
+                            : "text-slate-500 group-hover:text-slate-300"
+                        }`}
+                      >
+                        房间数: {track.realNodes || 0}
+                      </span>
+                    </div>
 
-                  <div className="absolute top-3 right-3 shadow-lg z-10 hidden group-hover:block">
-                    <div className="w-10 h-10 rounded-full bg-black/60 backdrop-blur border border-slate-600 flex items-center justify-center text-white hover:text-cyan-400 hover:scale-110 transition-transform">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditingTrack(track);
+                        setEditLink(track.audioUrl || "");
+                        setIsEditModalOpen(true);
+                      }}
+                      className={`cursor-pointer w-7 h-7 rounded flex items-center justify-center border transition-all duration-300 pointer-events-auto ${
+                        track.audioUrl
+                          ? "bg-emerald-500/20 border-emerald-400/50 text-emerald-400"
+                          : "bg-black/40 border-slate-700/50 text-slate-400 hover:border-cyan-500 hover:text-cyan-400 hover:bg-black/80"
+                      }`}
+                      title="校准/更新音频直链"
+                    >
+                      <LinkIcon className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  {/* Play Indicator Overlay (on hover) */}
+                  <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-10">
+                    <div className="w-12 h-12 rounded-full bg-cyan-500/20 backdrop-blur-sm border border-cyan-500/50 flex items-center justify-center text-cyan-400 transform scale-75 group-hover:scale-100 transition-transform duration-500">
                       <svg
                         viewBox="0 0 24 24"
                         fill="currentColor"
-                        className="w-4 h-4 ml-1"
+                        className="w-6 h-6 ml-1"
                       >
                         <path d="M8 5v14l11-7z" />
                       </svg>
                     </div>
                   </div>
 
-                  <div className="absolute top-3 left-3">
-                    <div
-                      className={`flex items-center gap-1.5 px-2 py-1.5 bg-black/80 backdrop-blur rounded border transition-colors ${isSelected ? "border-cyan-500 shadow-[0_0_10px_rgba(6,182,212,0.5)]" : track.realNodes > 0 ? "border-emerald-700/50" : "border-slate-800/50"}`}
-                    >
-                      <Headphones
-                        className={`w-3 h-3 ${isSelected ? "text-cyan-400 animate-pulse" : track.realNodes > 0 ? "text-emerald-400" : "text-slate-600"}`}
-                      />
-                      <span
-                        className={`text-[10px] font-mono font-bold tracking-wider ${isSelected ? "text-cyan-400" : track.realNodes > 0 ? "text-emerald-400" : "text-slate-500"}`}
-                      >
-                        已集结 {track.realNodes || 0} 节点
-                      </span>
-                    </div>
-                  </div>
-
                   <div
-                    className={`p-4 ${isSelected ? "bg-gradient-to-t from-cyan-950/80 to-transparent" : ""}`}
+                    className={`p-4 relative z-10 transition-colors duration-300 ${
+                      isSelected
+                        ? "bg-cyan-950/20"
+                        : "bg-slate-900/40 backdrop-blur-sm"
+                    }`}
                   >
                     <p
-                      className={`text-base font-bold truncate tracking-wide ${isSelected ? "text-cyan-300" : "text-slate-200"}`}
+                      className={`text-sm font-bold truncate tracking-tight transition-colors ${
+                        isSelected
+                          ? "text-cyan-300"
+                          : "text-slate-300 group-hover:text-white"
+                      }`}
                     >
                       {track.trackName}
                     </p>
-                    <p className="text-xs text-slate-500 truncate mt-1.5 font-mono uppercase tracking-wider">
+                    <p className="text-[10px] text-slate-500 truncate mt-1 font-mono uppercase tracking-[0.1em] opacity-70 group-hover:opacity-100 transition-opacity">
                       {track.collectionName || track.artistName}
                     </p>
                   </div>
@@ -477,7 +624,7 @@ export default function SongHub() {
                 </label>
                 <input
                   type="text"
-                  placeholder="以 http 开头的音频链接，暂不支持直接上传本地文件"
+                  placeholder="以 http / https 开头的音频链接，暂不支持直接上传本地文件"
                   className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-cyan-50 focus:outline-none focus:border-cyan-500 font-mono text-sm transition-colors"
                   value={customForm.audioUrl}
                   onChange={(e) =>
@@ -508,6 +655,80 @@ export default function SongHub() {
                     <Loader2 className="w-5 h-5 animate-spin" />
                   ) : (
                     "硬核注入 (INJECT)"
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= 编辑音频链接模态框 ================= */}
+      {isEditModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
+          <div className="w-full max-w-md bg-slate-900 border border-emerald-500/50 rounded-2xl shadow-[0_0_60px_rgba(16,185,129,0.1)] p-8 relative">
+            <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-emerald-500 to-transparent"></div>
+
+            <h3 className="text-xl font-bold font-mono text-emerald-400 mb-2 flex items-center gap-3">
+              <LinkIcon className="w-6 h-6" />
+              校准音频信道
+            </h3>
+            <p className="text-xs text-slate-500 font-mono mb-8 uppercase tracking-widest">
+              Track_ID: {editingTrack?.trackId || "N/A"}
+            </p>
+
+            <div className="space-y-6">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-xs font-mono text-slate-400 uppercase tracking-tighter">
+                    音频直链地址 / AUDIO_SOURCE_URI
+                  </label>
+                  {editLink && (
+                    <span className="text-[10px] text-emerald-500 font-mono bg-emerald-950/30 px-1 border border-emerald-900/50 rounded">
+                      VALID_FORMAT
+                    </span>
+                  )}
+                </div>
+                <input
+                  type="text"
+                  autoFocus
+                  placeholder="请输入以 http / https 开头的有效音频直链..."
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-4 text-emerald-50 focus:outline-none focus:border-emerald-500 font-mono text-sm transition-all shadow-inner"
+                  value={editLink}
+                  onChange={(e) => setEditLink(e.target.value)}
+                />
+                <div className="mt-4 p-3 bg-amber-950/10 border border-amber-900/20 rounded-lg">
+                  <p className="text-[10px] text-amber-500/80 leading-relaxed font-sans">
+                    💡 小贴士：
+                    <br />
+                    如果该歌曲是 VIP，您可以去 B 站或第三方歌曲站找到该曲目的
+                    MP3 直链并填入。
+                    <br />
+                    输入后，系统将在全局推演中强制优先使用您提供的地址，绕过官网
+                    30s 限制。
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-4 mt-10">
+                <button
+                  onClick={() => {
+                    setIsEditModalOpen(false);
+                    setEditingTrack(null);
+                  }}
+                  className="flex-1 py-4 rounded-xl border border-slate-800 text-slate-500 hover:bg-slate-800 hover:text-slate-300 transition-all font-mono font-bold uppercase tracking-[0.2em] text-xs cursor-pointer"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleEditSubmit}
+                  disabled={!editLink.trim() || isUpdatingLink}
+                  className="flex-[1.5] py-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-black font-bold tracking-[0.2em] transition-all disabled:opacity-30 disabled:cursor-not-allowed flex justify-center shadow-[0_0_20px_rgba(16,185,129,0.2)] hover:shadow-[0_0_30px_rgba(16,185,129,0.5)] font-mono uppercase text-xs cursor-pointer"
+                >
+                  {isUpdatingLink ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    "重写信道 (OVERWRITE)"
                   )}
                 </button>
               </div>

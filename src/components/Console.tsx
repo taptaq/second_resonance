@@ -6,12 +6,13 @@ import {
   AlertOctagon,
   Loader2,
 } from "lucide-react";
-import { useState, KeyboardEvent, useEffect } from "react";
+import { useState, KeyboardEvent, useEffect, useMemo } from "react";
 import { useAgentStore } from "../store/useAgentStore";
-import { runAgentTurn } from "../lib/agentOrchestrator";
+import { runAgentTurn, analyzePacingDirective } from "../lib/agentOrchestrator";
 
 export default function Console({ onOpenModal }: { onOpenModal: () => void }) {
   const [inputText, setInputText] = useState("");
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [countdown, setCountdown] = useState(30);
   const {
     humanOverride,
@@ -27,8 +28,9 @@ export default function Console({ onOpenModal }: { onOpenModal: () => void }) {
   } = useAgentStore();
 
   const isFull = roomInfo?.members?.length >= 4;
-  const myMember = roomInfo?.members?.find(
-    (m: any) => m.avatar?.id === avatarId,
+  const myMember = useMemo(
+    () => roomInfo?.members?.find((m: any) => m.avatar?.id === avatarId),
+    [roomInfo?.members, avatarId],
   );
   const isMyRoleDirector =
     myMember?.avatar?.role === "DIRECTOR" || myMember?.avatar?.role === "导演";
@@ -52,11 +54,17 @@ export default function Console({ onOpenModal }: { onOpenModal: () => void }) {
     return () => clearTimeout(autoLoopPhase);
   }, [isFull, isSpectator, isGenerating, songVibe, messages.length, playState]);
 
-  // Phase 3: Auto-Pilot Checkout Tracker
+  // Phase 3: Auto-Pilot Checkout Tracker - Initialization
+  useEffect(() => {
+    if (playState === "CHECKPOINT") {
+      setCountdown(30);
+    }
+  }, [playState]);
+
+  // Phase 3: Auto-Pilot Checkout Tracker - Timer Loop
   useEffect(() => {
     let timer: NodeJS.Timeout;
     if (playState === "CHECKPOINT") {
-      setCountdown(30);
       timer = setInterval(() => {
         setCountdown((prev) => {
           if (prev <= 1) {
@@ -75,7 +83,7 @@ export default function Console({ onOpenModal }: { onOpenModal: () => void }) {
       }, 1000);
     }
     return () => clearInterval(timer);
-  }, [playState, myMember, humanOverride, setPlayState]);
+  }, [playState, humanOverride, setPlayState, myMember?.avatar?.id]);
 
   const handleSend = () => {
     if (!inputText.trim() || isGenerating || !isFull) return;
@@ -110,30 +118,48 @@ export default function Console({ onOpenModal }: { onOpenModal: () => void }) {
               <div className="flex gap-4 items-center mb-3">
                 <Terminal className="w-4 h-4 text-rose-500" />
                 <span className="text-xs font-mono text-rose-500 font-bold uppercase tracking-widest">
-                  Phase 1: 权限已移交导演
+                  阶段 1：权限已移交导演
                 </span>
                 <span className="text-xs font-mono text-slate-500">
                   请您下达最初的全景剧情基调...
                 </span>
                 <button
-                  onClick={() =>
-                    setInputText(
-                      `【自动起搏】由于本次灵感波动判定为 [${songVibe}]，我希望建立一个充满张力的开场。请编剧以该基调构思第一幕情节，注意保留物理颗粒感。`,
-                    )
-                  }
-                  className="ml-auto flex items-center gap-1 text-[10px] text-cyan-400 border border-cyan-800/50 bg-cyan-950/30 px-2 py-1 rounded hover:bg-cyan-900/50 transition-colors"
+                  disabled={isAnalyzing}
+                  onClick={async () => {
+                    setIsAnalyzing(true);
+                    const directive = await analyzePacingDirective(
+                      songVibe,
+                      avatarId || "",
+                    );
+                    setInputText(directive);
+                    setIsAnalyzing(false);
+                  }}
+                  className={`ml-auto flex items-center gap-1 text-[10px] px-2 py-1 rounded transition-all ${
+                    isAnalyzing
+                      ? "bg-cyan-900/20 border border-cyan-800/30 text-cyan-700 font-mono"
+                      : "text-cyan-400 border border-cyan-800/50 bg-cyan-950/30 hover:bg-cyan-900/50"
+                  }`}
                 >
-                  <Sparkles className="w-3 h-3" /> AI 一键提取起搏指令
+                  {isAnalyzing ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : (
+                    <Sparkles className="w-3 h-3" />
+                  )}
+                  {isAnalyzing
+                    ? "正在解析人格与波段..."
+                    : "AI 一键生成导演开场白"}
                 </button>
               </div>
               <textarea
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
-                disabled={!isFull}
+                disabled={!isFull || isAnalyzing}
                 placeholder={
-                  !isFull
-                    ? "系统强制安全锁：队伍未满编，主板输入端口已物理切断。"
-                    : "作为大导演，请在此输入全局的产物基调与方向要求..."
+                  isAnalyzing
+                    ? "AI 正在以您的导演身份深度分析曲目调性，请稍候..."
+                    : !isFull
+                      ? "系统强制安全锁：队伍未满编，主板输入端口已物理切断。"
+                      : "作为大导演，请在此输入全局的产物基调与方向要求..."
                 }
                 className="flex-1 bg-slate-900/50 border border-rose-900/30 rounded p-4 text-slate-200 resize-none font-mono text-sm focus:outline-none focus:border-rose-500/50 disabled:opacity-50 disabled:cursor-not-allowed"
               />
@@ -161,14 +187,14 @@ export default function Console({ onOpenModal }: { onOpenModal: () => void }) {
                 className="mt-3 w-full py-3 bg-rose-600 hover:bg-rose-500 text-white font-mono font-bold tracking-widest uppercase rounded flex justify-center items-center shadow-[0_0_15px_rgba(225,29,72,0.3)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Clapperboard className="w-5 h-5 mr-2" />
-                发布全局基调 & 启动引擎 (LAUNCH)
+                发布全局基调 & 启动引擎 (启动)
               </button>
             </div>
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center border-[1.5px] border-dashed border-slate-800 rounded-xl bg-slate-900/20">
               <Loader2 className="w-8 h-8 text-slate-600 animate-spin mb-4" />
               <span className="text-cyan-600 font-mono tracking-widest animate-pulse font-bold">
-                Waiting for DIRECTOR to initiate Protocol...
+                等待导演发布推演开场协议...
               </span>
               <span className="text-xs text-slate-500 mt-2 font-mono">
                 （正在耐心等待最高权限「导演」节点发布全局基调...）
@@ -203,13 +229,12 @@ export default function Console({ onOpenModal }: { onOpenModal: () => void }) {
 
             <AlertOctagon className="w-10 h-10 text-amber-500 mb-3 animate-pulse" />
             <h2 className="text-amber-500 font-bold tracking-widest mb-2 font-mono">
-              PHASE 3: 检查点强制挂起 (CHECKPOINT)
+              阶段 3：推演暂停 (检查点)
             </h2>
             <p className="text-amber-500/70 text-xs mb-5 text-center max-w-lg">
-              本轮推演已阶段性收敛。作为活体权限人员，您可以选择“直接放行”进入下一轮深化，或在下方输入框中敲入人工干预指令（HUMAN
-              OVERRIDE）。如果您在{" "}
+              本轮推演已阶段性收敛。您可以选择“直接进入下一轮”或在下方框中输入手动干预指令 (手动指令介入)。如果您在{" "}
               <strong className="text-amber-400">{countdown}s</strong>{" "}
-              后未响应，您的托管分身将基于性格自行为您投票放行。
+              后未响应，系统将自动通过。
             </p>
             <div className="flex w-full gap-3 px-8">
               <textarea
@@ -234,7 +259,7 @@ export default function Console({ onOpenModal }: { onOpenModal: () => void }) {
                 onClick={onOpenModal}
                 className="px-6 py-2.5 border border-rose-900/50 text-rose-500 hover:bg-rose-950/40 rounded font-mono text-xs font-bold transition-colors uppercase tracking-widest shadow-[0_0_10px_rgba(225,29,72,0.1)]"
               >
-                驳回这轮结果并时光回溯 (RE-ROLL)
+                驳回此轮结果并回退 (回滚)
               </button>
               <button
                 onClick={() => {
@@ -247,8 +272,8 @@ export default function Console({ onOpenModal }: { onOpenModal: () => void }) {
                 className={`px-8 py-2.5 bg-amber-600 hover:bg-amber-500 text-black font-bold font-mono text-xs rounded transition-all uppercase tracking-widest ${inputText.trim() ? "shadow-[0_0_20px_rgba(245,158,11,0.6)]" : "shadow-[0_0_15px_rgba(245,158,11,0.2)] hover:shadow-[0_0_25px_rgba(245,158,11,0.4)]"}`}
               >
                 {inputText.trim()
-                  ? "载入指令 & 批准启动下一轮"
-                  : "跳过干预，直接放行并推演 (APPROVE)"}
+                  ? "载入指令 & 批准进入下一轮"
+                  : "跳过干预，直接推进 (批准)"}
               </button>
             </div>
           </div>
@@ -264,8 +289,8 @@ export default function Console({ onOpenModal }: { onOpenModal: () => void }) {
                 className={`text-xs font-mono tracking-widest ${playState === "COMPLETED" ? "text-emerald-600" : "text-cyan-600"}`}
               >
                 {playState === "COMPLETED"
-                  ? "PHASE 4: 演播全线收束 (SIMULATION TERMINATED)"
-                  : "PHASE 2: 链式受控推演进行中... (可随时介入 OVERRIDE)"}
+                  ? "阶段 4：推演同步结束 (已完成)"
+                  : "阶段 2：环境自动推演中... (可随时手动干预)"}
               </span>
             </div>
 
@@ -315,7 +340,7 @@ export default function Console({ onOpenModal }: { onOpenModal: () => void }) {
                   ? "[时空信道已切断]"
                   : "[实时通信信道已开启]"}
               </span>
-              <span>{"// OVERRIDE.SYS"}</span>
+              <span>{"// 手动指令介入.SYS"}</span>
             </div>
           </>
         )}
@@ -350,18 +375,18 @@ export default function Console({ onOpenModal }: { onOpenModal: () => void }) {
               }
             >
               {isSpectator
-                ? "旁观模式: 实时静默同步推演中... (SPECTATING)"
+                ? "观察模式: 实时静默同步推演中... (观看模式)"
                 : !isFull
-                  ? `系统强制挂起：网络缺失 ${4 - (roomInfo?.members?.length || 0)} 名特遣职能接入...`
+                  ? `系统强制挂起：网络缺失 ${4 - (roomInfo?.members?.length || 0)} 名成员接入...`
                   : playState === "COMPLETED"
-                    ? "演播已成功收敛。时间线锁定不可篡改 (FINISHED)"
+                    ? "推演已成功收敛。内容已锁定不可篡改 (已完成)"
                     : playState === "CHECKPOINT"
-                      ? "检查点人工核验中... (CHECKPOINT EVENT DETECTED)"
+                      ? "检查点人工核验中... (正在核验)"
                       : messages.length === 0
-                        ? "阶段 一：请顶层导演发布全局创世起搏指令..."
+                        ? "阶段 1：请导演发布全局引导指令..."
                         : playState === "PAUSED" || playState === "IDLE"
-                          ? "引擎系统空载 - 点击点燃重启 A2A 链式推演 (RESUME) >>"
-                          : "A2A 全频带序列推演中 (Engaged) || 点击强制拉停刹车"}
+                          ? "引擎系统空载 - 点击重新开启自动推演 (恢复推进) >>"
+                          : "AI 自动序列推演中 (正在推演) || 点击强制暂停推演"}
             </span>
           </button>
           <button
@@ -369,7 +394,7 @@ export default function Console({ onOpenModal }: { onOpenModal: () => void }) {
             onClick={!isSpectator && isFull ? onOpenModal : undefined}
             disabled={!isFull || isSpectator}
           >
-            <span>时空崩塌 (REBOOT)</span>
+            <span>清空重置 (REBOOT)</span>
           </button>
         </div>
       </div>

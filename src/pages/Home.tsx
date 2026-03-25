@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Terminal, Fingerprint, Map } from "lucide-react";
+import { Terminal, Fingerprint, Map, Loader2, Sparkles } from "lucide-react";
 import { useAgentStore } from "../store/useAgentStore";
 
 export default function Home() {
@@ -8,8 +8,10 @@ export default function Home() {
   const [artist, setArtist] = useState("");
   const [role, setRole] = useState("导演");
   const [mbti, setMbti] = useState("INTJ");
+  const [thought, setThought] = useState("");
   const [isCheckingName, setIsCheckingName] = useState(false);
   const [nameMessage, setNameMessage] = useState("");
+  const [isJumping, setIsJumping] = useState(false);
   const navigate = useNavigate();
   const { secondMeUser } = useAgentStore();
 
@@ -21,15 +23,17 @@ export default function Home() {
     const timer = setTimeout(async () => {
       setIsCheckingName(true);
       try {
-        const res = await fetch(`http://localhost:3005/api/avatars/check?name=${encodeURIComponent(nickname)}`);
+        const res = await fetch(
+          `http://localhost:3005/api/avatars/check?name=${encodeURIComponent(nickname)}`,
+        );
         const data = await res.json();
         if (data.found) {
-           setNameMessage("✅ 检测到已注册的代号记忆，已自动重载专属职能与 MBTI。");
-           if (data.role) setRole(data.role);
-           if (data.mbti) setMbti(data.mbti);
-           if (data.artist) setArtist(data.artist);
+          setNameMessage("✅ 检测到已注册的昵称，已自动载入角色与 MBTI。");
+          if (data.role) setRole(data.role);
+          if (data.mbti) setMbti(data.mbti);
+          if (data.artist) setArtist(data.artist);
         } else {
-           setNameMessage("🌟 全新探测到的精神维度标志，参数将保留默认。");
+          setNameMessage("🌟 欢迎新成员，请输入你的信息。");
         }
       } catch (e) {
         setNameMessage("");
@@ -50,29 +54,35 @@ export default function Home() {
   const isFormDisabled = isCheckingName || !nickname.trim();
   const isSubmitDisabled = isFormDisabled || !artist.trim();
 
-  const handleNext = () => {
-    if (isSubmitDisabled)
-      return alert("请先输入你的特派分身代号以及要追随的主推灵感歌手名称！");
-    // Save avatar parameters and proceed to the Song Hub Route smoothly
-    navigate("/select-song", { state: { nickname, artist, role, mbti } });
+  const handleNext = async () => {
+    if (isSubmitDisabled) return alert("请先输入你的昵称及喜欢的歌手名称！");
+
+    setIsJumping(true);
+
+    // 模拟系统“位面跃迁”准备时间，增加科技仪式感
+    await new Promise((r) => setTimeout(r, 1500));
+
+    navigate("/select-song", {
+      state: { nickname, artist, role, mbti, thought },
+    });
   };
 
   const getRoleRecommendation = (mbtiStr: string) => {
     if (["ENTJ", "ESTJ", "ENFJ", "INTJ"].includes(mbtiStr))
-      return { role: "导演", desc: "天生的统帅结构，擅长把控作品全局基调" };
+      return { role: "导演", desc: "统筹全局，负责作品的方向把控" };
     if (["INTP", "INFP", "INFJ", "ENTP"].includes(mbtiStr))
-      return { role: "编剧", desc: "极高的脑洞与同理共振，适合执笔剧情编排" };
+      return { role: "编剧", desc: "想象力丰富，负责剧情的编排与文字" };
     if (["ISFP", "ISTP", "ENFP", "ESTP"].includes(mbtiStr))
       return {
         role: "视觉",
-        desc: "对画面与色彩极其敏感，适合构建视觉意象",
+        desc: "对美感敏锐，负责构建视觉画面与意象",
       };
     if (["ISTJ", "ISFJ", "ESFJ", "ESFP"].includes(mbtiStr))
       return {
         role: "音频",
-        desc: "严谨且注重感官律动细节，适合编织听觉频谱",
+        desc: "注重感官律动，负责编织音乐与听觉细节",
       };
-    return { role: "导演", desc: "全能型稳定人格，适配多维核心" };
+    return { role: "导演", desc: "全能型角色，适配多种创作场景" };
   };
 
   return (
@@ -84,10 +94,10 @@ export default function Home() {
           <Terminal className="w-8 h-8 text-cyan-500 animate-pulse" />
           <div>
             <h1 className="text-2xl font-bold tracking-widest text-slate-200">
-              <span className="text-cyan-500">第二共振</span> A2A 枢纽
+              <span className="text-cyan-500">第二共振</span> · A2A入场设置
             </h1>
             <p className="text-xs text-slate-500 font-mono mt-1">
-              SecondMe Auth Pending... Entering Guest Initialization
+              Welcome to Second Resonance. Initialize your role.
             </p>
           </div>
         </div>
@@ -97,16 +107,29 @@ export default function Home() {
             <label className="block text-xs font-mono text-cyan-600 mb-2">
               / Agent 分身代号
             </label>
-            <input
-              type="text"
-              value={nickname}
-              onChange={(e) => setNickname(e.target.value)}
-              placeholder="例如: 赛博流浪汉"
-              className="w-full bg-slate-900 border border-slate-700 text-slate-200 rounded-lg px-4 py-3 focus:outline-none focus:border-cyan-500 transition-colors"
-            />
+            <div className="relative">
+              <input
+                type="text"
+                value={nickname}
+                onChange={(e) => setNickname(e.target.value)}
+                placeholder="例如: 赛博流浪汉"
+                className={`w-full bg-slate-900 border ${isCheckingName ? "border-cyan-500 shadow-[0_0_15px_rgba(6,182,212,0.2)]" : "border-slate-700"} text-slate-200 rounded-lg px-4 py-3 focus:outline-none focus:border-cyan-500 transition-all`}
+              />
+              {isCheckingName && (
+                <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                  <Loader2 className="w-4 h-4 text-cyan-500 animate-spin" />
+                </div>
+              )}
+            </div>
             {nameMessage && (
-              <p className={`text-[10px] font-mono mt-2 flex items-center gap-1 ${nameMessage.includes("✅") ? "text-emerald-400" : "text-cyan-600"}`}>
-                {isCheckingName ? <span className="animate-pulse">连线检索中...</span> : nameMessage}
+              <p
+                className={`text-[10px] font-mono mt-2 flex items-center gap-1 ${nameMessage.includes("✅") ? "text-emerald-400" : "text-cyan-600"}`}
+              >
+                {isCheckingName ? (
+                  <span className="animate-pulse">连线检索中...</span>
+                ) : (
+                  nameMessage
+                )}
               </p>
             )}
           </div>
@@ -123,17 +146,14 @@ export default function Home() {
                 if (e.key === "Enter" && !isFormDisabled) handleNext();
               }}
               disabled={isFormDisabled}
-              placeholder="你想匹配哪位歌手的同好？(例如: 孙燕姿)"
-              className={`w-full bg-slate-900 border border-slate-700 text-slate-200 rounded-lg px-4 py-3 focus:outline-none focus:border-cyan-500 transition-colors ${isFormDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+              placeholder="你想匹配哪位歌手的同好？（例如: 薛之谦）"
+              className={`w-full bg-slate-900 border border-slate-700 text-slate-200 rounded-lg px-4 py-3 focus:outline-none focus:border-cyan-500 transition-colors ${isFormDisabled ? "opacity-50 cursor-not-allowed" : ""}`}
             />
           </div>
 
           <div>
             <label className="block text-xs font-mono text-cyan-600 mb-2 flex justify-between">
               <span>/ 先天 MBTI 性格矩阵</span>
-              <span className="text-slate-600 flex items-center gap-1">
-                <Fingerprint className="w-3 h-3" /> 预留 SecondMe 记忆接口
-              </span>
             </label>
             <select
               value={mbti}
@@ -141,7 +161,7 @@ export default function Home() {
                 setMbti(e.target.value);
               }}
               disabled={isFormDisabled}
-              className={`w-full bg-slate-900 border border-slate-700 text-slate-200 rounded-lg px-4 py-3 focus:outline-none focus:border-cyan-500 transition-colors appearance-none ${isFormDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+              className={`w-full bg-slate-900 border border-slate-700 text-slate-200 rounded-lg px-4 py-3 focus:outline-none focus:border-cyan-500 transition-colors appearance-none ${isFormDisabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
             >
               <optgroup label="分析家">
                 <option value="INTJ">INTJ (建筑师)</option>
@@ -176,7 +196,7 @@ export default function Home() {
 
           <div>
             <label className="block text-xs font-mono text-cyan-600 mb-2 flex items-center justify-between">
-              <span>/ 专属职能序列</span>
+              <span>/ 偏好职能序列</span>
               <span className="px-2 py-0.5 bg-cyan-900/30 text-cyan-400 rounded text-[10px] border border-cyan-800/50">
                 系统基于 {mbti} 的核心职能推荐:{" "}
                 {getRoleRecommendation(mbti).role}
@@ -210,16 +230,53 @@ export default function Home() {
             </p>
           </div>
 
+          <div>
+            <label className="block text-xs font-mono text-cyan-600 mb-2">
+              / 个人共创思路预载 (选填)
+            </label>
+            <textarea
+              value={thought}
+              onChange={(e) => setThought(e.target.value)}
+              disabled={isFormDisabled}
+              placeholder="如果您对后续推演有特定偏好（例如：希望加入赛博朋克元素、希望结局是悲剧），请在此输入..."
+              className={`w-full h-24 bg-slate-900 border border-slate-700 text-slate-200 rounded-lg px-4 py-3 focus:outline-none focus:border-cyan-500 transition-colors resize-none font-mono text-sm custom-scrollbar ${isFormDisabled ? "opacity-50 cursor-not-allowed" : ""}`}
+            />
+          </div>
+
           <button
             onClick={handleNext}
             disabled={isSubmitDisabled}
-            className={`w-full mt-4 py-4 rounded-lg border border-indigo-500/50 text-indigo-400 font-bold tracking-widest uppercase transition-all flex justify-center items-center gap-3 relative overflow-hidden group ${isSubmitDisabled ? 'bg-indigo-900/10 opacity-50 cursor-not-allowed' : 'bg-indigo-900/30 hover:bg-indigo-800/40'}`}
+            className={`w-full mt-4 py-4 rounded-lg border border-indigo-500/50 text-indigo-400 font-bold tracking-widest uppercase transition-all flex justify-center items-center gap-3 relative overflow-hidden group ${isSubmitDisabled ? "bg-indigo-900/10 opacity-50 cursor-not-allowed" : "bg-indigo-900/30 hover:bg-indigo-800/40"}`}
           >
             <Map className="w-5 h-5 group-hover:animate-bounce" />
             <span className="font-mono text-sm">携源参数跃迁至选曲星港</span>
           </button>
         </div>
       </div>
+
+      {/* ================= 跃迁加载遮罩 ================= */}
+      {isJumping && (
+        <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-xl flex flex-col items-center justify-center">
+          <div className="relative">
+            <div className="w-24 h-24 border-2 border-cyan-500/20 rounded-full animate-ping absolute -inset-0"></div>
+            <div className="w-24 h-24 border-t-2 border-cyan-500 rounded-full animate-spin"></div>
+            <Sparkles className="w-8 h-8 text-cyan-500 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 animate-pulse" />
+          </div>
+          <div className="mt-12 flex flex-col items-center gap-3">
+            <h2 className="text-xl font-bold font-mono text-cyan-400 tracking-[0.5em] animate-pulse uppercase">
+              正在初始化共振位面
+            </h2>
+            <p className="text-[10px] font-mono text-slate-500 uppercase tracking-widest">
+              Syncing Parameters / Portal Opening...
+            </p>
+          </div>
+          <div className="absolute bottom-12 left-0 w-full flex justify-center px-12">
+            <div className="w-full max-w-xs h-1 bg-slate-900 rounded-full overflow-hidden border border-slate-800">
+              <div className="h-full bg-gradient-to-r from-transparent via-cyan-500 to-transparent w-full animate-[shimmer_1.5s_infinite]"></div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

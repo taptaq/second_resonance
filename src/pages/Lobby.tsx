@@ -117,8 +117,8 @@ export default function Lobby() {
             </button>
             <div>
               <h1 className="text-3xl font-bold tracking-widest text-slate-200 uppercase">
-                节点大厅{" "}
-                <span className="text-cyan-500 font-mono">/[LOBBY]</span>
+                房间列表{" "}
+                <span className="text-cyan-500 font-mono">/[ROOMS]</span>
               </h1>
               <div className="flex items-center gap-3 mt-3 text-xs font-mono text-slate-500">
                 <span className="px-2 py-1 bg-slate-800 rounded border border-slate-700">
@@ -144,7 +144,7 @@ export default function Lobby() {
             ) : (
               <PlusCircle className="w-5 h-5" />
             )}
-            开辟新次元 (CREATE)
+            创建新房间
           </button>
         </div>
 
@@ -153,17 +153,17 @@ export default function Lobby() {
           <div className="flex-1 flex flex-col items-center justify-center text-cyan-500/50 mt-20">
             <Loader2 className="w-12 h-12 animate-spin mb-4" />
             <span className="font-mono tracking-widest uppercase">
-              扫描活跃节点中...
+              正在获取房间内容...
             </span>
           </div>
         ) : rooms.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center text-slate-500 font-mono border border-slate-800/50 rounded-2xl bg-slate-900/10 p-12 text-center mt-10">
             <ShieldAlert className="w-16 h-16 text-rose-500/30 mb-4" />
             <p className="text-lg text-slate-400 mb-2">
-              未探测到该曲目的活跃对局
+              暂无正在进行的房间
             </p>
             <p className="text-xs">
-              你可以点击右上角的【开辟新次元】成为这首歌的第一个拓荒者。
+              你可以点击右上角的【创建新房间】成为这首歌的高效发起者。
             </p>
           </div>
         ) : (
@@ -205,7 +205,7 @@ export default function Lobby() {
 
                   <div className="flex-1 mb-6">
                     <p className="text-xs text-slate-500 font-mono mb-2 uppercase">
-                      已入驻职能 ({room.members.length}/4) :
+                      已加入角色 ({room.members.length}/4) :
                     </p>
                     <div className="flex flex-wrap gap-2">
                       {allRoles.map((roleLabel) => {
@@ -247,12 +247,12 @@ export default function Lobby() {
                   >
                     <UserPlus className="w-4 h-4" />
                     {amIInRoom
-                      ? "返回对战室 (RETURN)"
+                      ? "进入房间 (ENTER)"
                       : isFull
                         ? "旁观推演 (SPECTATE)"
                         : hasMyRole
-                          ? "该职能冲突"
-                          : "请求骇入 (JOIN)"}
+                          ? "该角色已有人占领"
+                          : "加入房间 (JOIN)"}
                   </button>
                 </div>
               );

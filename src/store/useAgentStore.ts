@@ -15,6 +15,10 @@ export interface Message {
 
 interface AgentStore {
   messages: Message[];
+  chatMessages: Message[];
+  lastReadChatCount: number;
+  isChatOpen: boolean;
+  setChatOpen: (v: boolean) => void;
   isGenerating: boolean;
   playState: PlayState;
   roomId: string | null;
@@ -44,6 +48,13 @@ export const useAgentStore = create<AgentStore>()(
   persist(
     (set) => ({
       messages: [],
+  chatMessages: [],
+  lastReadChatCount: 0,
+  isChatOpen: false,
+  setChatOpen: (v) => set((state) => ({ 
+    isChatOpen: v, 
+    lastReadChatCount: v ? state.chatMessages.length : state.lastReadChatCount 
+  })),
   isGenerating: false,
   playState: 'IDLE',
   roomId: null,
@@ -74,18 +85,35 @@ export const useAgentStore = create<AgentStore>()(
 
   setMessages: (dbMsgs) => set((state) => {
     if (!dbMsgs) return state;
-    // Only update if DB has more items than our local state (Host optimism protection)
-    if (dbMsgs.length > state.messages.length) {
-      const mapped = dbMsgs.map((m: any) => ({
-        id: m.id,
-        role: m.agentRole,
-        content: m.content,
-        timestamp: new Date(m.createdAt).getTime(),
-        metadata: m.metadata
-      }));
-      return { messages: mapped };
+    
+    const parsed = dbMsgs.map((m: any) => ({
+      id: m.id,
+      role: m.agentRole,
+      content: m.content,
+      timestamp: new Date(m.createdAt).getTime(),
+      metadata: m.metadata
+    }));
+
+    const story = parsed.filter((m: any) => m.role !== 'CHAT');
+    const bchat = parsed.filter((m: any) => m.role === 'CHAT');
+
+    let nextState: Partial<AgentStore> = {};
+    
+    const isLocalPolluted = state.messages.some((m: any) => m.role === 'CHAT');
+    const isSignificantWipe = story.length === 0 && state.messages.length > 0;
+    
+    if (story.length > state.messages.length || isSignificantWipe || isLocalPolluted) {
+      nextState.messages = story;
     }
-    return state;
+    
+    if (bchat.length > state.chatMessages.length) {
+      nextState.chatMessages = bchat;
+      if (state.isChatOpen) {
+        nextState.lastReadChatCount = bchat.length;
+      }
+    }
+
+    return Object.keys(nextState).length > 0 ? nextState : state;
   }),
 
   humanOverride: (content) => set((state) => ({

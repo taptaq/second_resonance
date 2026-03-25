@@ -4,6 +4,7 @@ import Header from "../components/Header";
 import Sidebar from "../components/Sidebar";
 import MainStage from "../components/MainStage";
 import Console from "../components/Console";
+import BackstageChat from "../components/BackstageChat";
 import RollbackModal from "../components/RollbackModal";
 import { useAgentStore } from "../store/useAgentStore";
 import { Loader2 } from "lucide-react";
@@ -60,6 +61,7 @@ export default function Room() {
         <Sidebar />
         <MainStage />
         <Console onOpenModal={() => setIsModalOpen(true)} />
+        <BackstageChat />
       </div>
       {isModalOpen && <RollbackModal onClose={() => setIsModalOpen(false)} />}
     </div>

@@ -27,7 +27,7 @@ export default function Landing() {
         <p className="text-base md:text-lg text-slate-400 font-light tracking-wider mb-12 max-w-2xl leading-relaxed">
           这是一个专为音乐爱好者打造的
           <strong className="text-cyan-400 font-normal">
-            多阵营同人演绎与共创空间
+            A2A同人创作与共创空间
           </strong>
           。<br className="hidden md:block" />
           基于四种不同的创作职能，你将被赋予专属的 MBTI 人格代理。
@@ -61,10 +61,10 @@ export default function Landing() {
 
         <div className="mt-24 grid grid-cols-2 md:grid-cols-4 gap-8 text-center opacity-60">
           {[
-            { tag: "01", title: "DIRECTOR", desc: "宏观剧情掌控" },
-            { tag: "02", title: "WRITER", desc: "角色设定推演" },
-            { tag: "03", title: "VISUALIZER", desc: "视觉分镜采样" },
-            { tag: "04", title: "AUDIO", desc: "氛围频段调制" },
+            { tag: "01", title: "DIRECTOR", desc: "全局剧情掌控" },
+            { tag: "02", title: "WRITER", desc: "剧情推演编写" },
+            { tag: "03", title: "VISUALIZER", desc: "视觉分镜捕捉" },
+            { tag: "04", title: "AUDIO", desc: "音乐氛围调制" },
           ].map((stat) => (
             <div
               key={stat.tag}

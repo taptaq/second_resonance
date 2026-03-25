@@ -15,7 +15,7 @@ export async function runAgentTurn(songVibe: string) {
       if (history.length === 13 && history[history.length - 1].role !== 'SYSTEM') {
         store.addMessage({ 
           role: 'SYSTEM', 
-          content: '>>> [A2A 进程冻结] 联合推演已达边界。当前时空的「第二共振」产物已永久落定。 <<<' 
+          content: '>>> [系统提示] 推演已达上限。当前时空的「第二共振」成果已锁定。 <<<' 
         });
         store.setPlayState('COMPLETED');
       }
@@ -49,7 +49,7 @@ export async function runAgentTurn(songVibe: string) {
         const title = roleMap[m.avatar.role] || m.avatar.role;
         return `- [${m.avatar.role} / ${title}] 代号: ${m.avatar.name} (MBTI: ${m.avatar.mbti})`;
       }).join('\n');
-      teamContext = `\n\n[当前战局所有参演特遣队员]\n${allProfiles}\n请注意呼应团队中其他成员的设定。`;
+      teamContext = `\n\n[当前房间所有参与角色]\n${allProfiles}\n请注意呼应团队中其他成员的设定。`;
       
       const me = roomInfo.members.find((m: any) => m.avatar.role === nextRole || m.avatar.role === roleMap[nextRole])?.avatar;
       if (me) {
@@ -74,11 +74,13 @@ export async function runAgentTurn(songVibe: string) {
 
     const responseText = await generateContent(provider, systemPrompt, promptContext);
     
-    const meta = nextRole === 'VISUALIZER' 
-      ? extractVisualTags(responseText) 
-      : nextRole === 'AUDIO' 
-        ? extractAudioTags(responseText) 
-        : undefined;
+    // 视觉与音频元数据提取优化
+    let meta = undefined;
+    if (nextRole === 'VISUALIZER') {
+      meta = extractVisualTags(responseText);
+    } else if (nextRole === 'AUDIO') {
+      meta = extractAudioTags(responseText);
+    }
 
     store.addMessage({
       role: nextRole,
@@ -110,12 +112,71 @@ export async function runAgentTurn(songVibe: string) {
   }
 }
 
+/**
+ * AI 智能启发分析：基于导演性格与歌曲调性，生成专业的开场指令建议
+ */
+export async function analyzePacingDirective(songVibe: string, avatarId: string): Promise<string> {
+  const store = useAgentStore.getState();
+  const roomInfo = store.roomInfo;
+  const songInfo = store.songInfo;
+  
+  // 查找当前用户的导演身份卡
+  const me = roomInfo?.members?.find((m: any) => m.avatar?.id === avatarId)?.avatar;
+  const directorName = me?.name || "未知角色";
+  const directorMBTI = me?.mbti || "INTJ";
+  
+  const history = store.messages;
+  const currentAct = Math.floor(history.length / 4) + 1;
+  const recentHistory = history.length > 0 
+    ? history.slice(-4).map(m => `[${m.role}]: ${m.content}`).join('\n\n')
+    : "尚未開始。";
+
+  const systemPrompt = "你是一位专业的导演助理，负责根据导演性格、当前音乐主题以及剧情进展，撰写具有感染力和叙事递进感的「启发指令」。";
+  
+  const userPrompt = `
+[当前角色身份]
+代号: ${directorName}
+人格类型 (MBTI): ${directorMBTI}
+
+[当前音乐/场景基调]
+${songVibe}
+歌曲名称: ${songInfo?.trackName || '未知'}
+歌手: ${songInfo?.artistName || '未知'}
+
+[剧情演化状态]
+当前幕次: 第 ${currentAct} 幕
+${currentAct > 1 ? `\n[前一幕剧情回顾]\n${recentHistory}\n` : "[初始状态] 准备开启第一幕。"}
+
+[任务要求]
+请以该导演的身份，为团队中的「编剧」下达一段富有张力的【第 ${currentAct} 幕】创作指令。
+1. 字数控制在 100 字以内。
+2. 说话风格严格符合导演的 MBTI 性格。
+3. 指令要具体、有画面感，提及歌曲的独特氛围。
+4. **关键要求**：${currentAct === 1 ? '这是开篇，请设定宏大的视角与悬念。' : `这是剧情的深入，请基于「前一幕回顾」的内容，引导编剧将冲突升级。`}
+5. 格式：【启发指令】[指令内容]
+
+请直接输出指令内容，不要有任何开场白。
+  `;
+
+  try {
+    const response = await generateContent('DEEPSEEK', systemPrompt, userPrompt);
+    return response || "【自动启发】信号同步失败，请手动输入指令。";
+  } catch (err) {
+    console.error("Pacing analysis failed:", err);
+    return "【自动启发】由于网络不稳定，分析仪暂时下线。";
+  }
+}
+
 function extractVisualTags(text: string) {
+  // 匹配中括号内的内容，且不限于大写，更加宽容
   const match = text.match(/\[(.*?)\]/);
-  return { tag: match ? match[1] : 'RENDER_UNDEFINED' };
+  if (match) return { tag: match[1].trim() };
+  
+  // 如果没找到中括号，尝试提取前 10 个字符作为语义种子
+  return { tag: 'SCENE_AUTO_GEN' };
 }
 
 function extractAudioTags(text: string) {
   const match = text.match(/\[(.*?)\]/);
-  return { tags: match ? match[1] : 'BPM:100, Genre:Unknown, Mood:Unknown' };
+  return { tags: match ? match[1].trim() : 'BPM:120, Genre:Ambient, Mood:Ethereal' };
 }
